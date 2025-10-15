@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🎯 Current Session Context
+
+**IMPORTANT:** Before starting work, read **CLAUDE.local.md** for current project state, architectural decisions, and development priorities. This file is the session memory bank updated after each development session.
+
+**Quick Links:**
+- Current Status: See **CLAUDE.local.md** (Session Memory Bank)
+- Next Steps: See **NEXT_STEPS.md** (Immediate Action Plan)
+- Full Audit: See **docs/ARCHITECTURE_ALIGNMENT_AUDIT.md** (Complete Validation Report)
+- Quick Summary: See **ARCHITECTURE_AUDIT_SUMMARY.md** (Executive Overview)
+
+**Last Audit:** October 14, 2025 - ✅ PASSED (93% alignment)
+
 ## Project Overview
 
 **Only1MCP** is a high-performance, Rust-based MCP (Model Context Protocol) server aggregator that provides a unified proxy interface for AI applications to interact with multiple MCP tool servers. It dramatically reduces context overhead (50-70% reduction) while improving performance (<5ms latency, 10k+ req/s throughput).
