@@ -1,6 +1,6 @@
-# Only1MCP - "Only1" (... the Ultimate MCP Server Aggregator / Context Switcher ...)
+# Only1MCP -- "Only1": the Ultimate MCP Server Aggregator / Context Switcher
 
-**A high-performance, Rust-based proxy and aggregator for Model Context Protocol (MCP) servers w/ intelligent context swapping.**
+**High-performance, Rust-based proxy and aggregator for Model Context Protocol (MCP) servers with intelligent context swapping.**
 
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
