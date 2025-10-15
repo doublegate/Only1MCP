@@ -1,0 +1,327 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'benches/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+  schedule:
+    # Run benchmarks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Build in release mode
+        run: cargo build --release
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --no-fail-fast -- --output-format bencher | tee output.txt
+          # Parse and save results
+          echo "BENCH_RESULTS<<EOF" >> $GITHUB_ENV
+          cat output.txt >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Run criterion benchmarks
+        if: success()
+        run: |
+          # Run criterion benchmarks and generate HTML report
+          cargo bench --bench proxy_benchmark -- --verbose
+          cargo bench --bench cache_benchmark -- --verbose
+          cargo bench --bench routing_benchmark -- --verbose
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: |
+            target/criterion
+            output.txt
+
+      - name: Compare benchmarks
+        if: github.event_name == 'pull_request'
+        uses: boa-dev/criterion-compare-action@v3
+        with:
+          branchName: ${{ github.base_ref }}
+
+      - name: Store benchmark result
+        if: github.ref == 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Only1MCP Benchmark
+          tool: 'cargo'
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '200%'
+          comment-on-alert: true
+          fail-on-alert: true
+          alert-comment-cc-users: '@only1mcp/maintainers'
+
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Start proxy server
+        run: |
+          ./target/release/only1mcp start --config config/templates/team.yaml &
+          echo $! > proxy.pid
+          sleep 5  # Wait for server to start
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run load tests
+        run: |
+          cat > load-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+
+          export let options = {
+            stages: [
+              { duration: '30s', target: 100 },  // Ramp up
+              { duration: '1m', target: 100 },   // Stay at 100 users
+              { duration: '30s', target: 200 },  // Ramp to 200
+              { duration: '1m', target: 200 },   // Stay at 200 users
+              { duration: '30s', target: 0 },    // Ramp down
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<100'],  // 95% of requests under 100ms
+              http_req_failed: ['rate<0.1'],     // Error rate under 10%
+            },
+          };
+
+          export default function () {
+            const payload = JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'tools/list',
+              id: 1,
+            });
+
+            const params = {
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            };
+
+            const res = http.post('http://localhost:8080/mcp', payload, params);
+
+            check(res, {
+              'status is 200': (r) => r.status === 200,
+              'response time < 100ms': (r) => r.timings.duration < 100,
+            });
+
+            sleep(0.1);
+          }
+          EOF
+
+          k6 run --out json=results.json load-test.js
+
+      - name: Stop proxy server
+        if: always()
+        run: |
+          if [ -f proxy.pid ]; then
+            kill $(cat proxy.pid) || true
+          fi
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-results
+          path: results.json
+
+  memory-profile:
+    name: Memory Profiling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Build with debug symbols
+        run: |
+          cargo build --release
+          # Keep debug symbols for profiling
+          cp target/release/only1mcp target/release/only1mcp-profile
+
+      - name: Run Valgrind memory check
+        run: |
+          valgrind --leak-check=full \
+                   --show-leak-kinds=all \
+                   --track-origins=yes \
+                   --verbose \
+                   --log-file=valgrind-out.txt \
+                   ./target/release/only1mcp-profile validate config/templates/solo.yaml
+
+      - name: Check for memory leaks
+        run: |
+          if grep -q "definitely lost" valgrind-out.txt; then
+            echo "Memory leaks detected!"
+            cat valgrind-out.txt
+            exit 1
+          else
+            echo "No memory leaks detected"
+          fi
+
+      - name: Upload Valgrind report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: valgrind-report
+          path: valgrind-out.txt
+
+  flamegraph:
+    name: Generate Flamegraph
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install flamegraph dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-tools-common linux-tools-generic
+          cargo install flamegraph
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Generate flamegraph
+        run: |
+          # Run with perf
+          sudo flamegraph -o flamegraph.svg -- ./target/release/only1mcp validate config/templates/team.yaml
+
+      - name: Upload flamegraph
+        uses: actions/upload-artifact@v3
+        with:
+          name: flamegraph
+          path: flamegraph.svg
+
+  report:
+    name: Generate Performance Report
+    needs: [benchmark, load-test, memory-profile]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Generate report
+        run: |
+          cat > performance-report.md << 'EOF'
+          # Performance Report
+
+          ## Benchmark Results
+          $(cat benchmark-results/output.txt 2>/dev/null || echo "No benchmark results available")
+
+          ## Load Test Summary
+          $(cat load-test-results/results.json | jq -r '.metrics.http_req_duration | "Average latency: \(.avg)ms, P95: \(.["p(95)"])ms"' 2>/dev/null || echo "No load test results available")
+
+          ## Memory Profile
+          $(grep "ERROR SUMMARY" valgrind-report/valgrind-out.txt 2>/dev/null || echo "No memory profile available")
+
+          ---
+          Generated: $(date)
+          Commit: ${{ github.sha }}
+          EOF
+
+          cat performance-report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.md
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('performance-report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Notify on regression
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **Performance Regression Detected!**\n\nPlease review the benchmark results and address any performance issues before merging.'
+            });

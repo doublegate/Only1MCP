@@ -1,0 +1,54 @@
+# Rust formatting configuration for Only1MCP
+
+# Basic formatting
+edition = "2021"
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Unix"
+use_small_heuristics = "Default"
+indent_style = "Block"
+
+# Line width
+max_width = 100
+comment_width = 80
+wrap_comments = true
+
+# Imports
+imports_indent = "Block"
+imports_layout = "Vertical"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+reorder_modules = true
+
+# Functions and impl blocks
+fn_single_line = false
+where_single_line = false
+brace_style = "SameLineWhere"
+trailing_comma = "Vertical"
+blank_lines_upper_bound = 2
+
+# Chains
+chain_width = 80
+single_line_if_else_max_width = 80
+
+# Formatting
+format_strings = false
+format_code_in_doc_comments = true
+format_macro_matchers = true
+format_macro_bodies = true
+
+# Spaces
+spaces_around_ranges = false
+binop_separator = "Front"
+
+# Other
+match_block_trailing_comma = true
+overflow_delimited_expr = true
+struct_lit_single_line = true
+enum_discrim_align_threshold = 20
+use_field_init_shorthand = true
+force_explicit_abi = true
+use_try_shorthand = true
+
+# Preserve formatting
+skip_children = false

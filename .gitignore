@@ -1,0 +1,57 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Configuration (exclude local configs, keep templates)
+/config.yaml
+/config.toml
+only1mcp.yaml
+only1mcp.toml
+/.only1mcp/
+!config/templates/
+
+# Logs
+*.log
+/logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+/coverage/
+*.profraw
+*.profdata
+
+# Benchmarks
+/target/criterion/
+
+# Documentation build
+/target/doc/
+/book/
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib

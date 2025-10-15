@@ -1,0 +1,46 @@
+# Clippy linting configuration for Only1MCP
+
+# Set MSRV (Minimum Supported Rust Version)
+msrv = "1.75.0"
+
+# Maximum cognitive complexity for functions
+cognitive-complexity-threshold = 30
+
+# Maximum number of lines for functions
+too-many-lines-threshold = 100
+
+# Maximum number of arguments for functions
+too-many-arguments-threshold = 7
+
+# Maximum nesting level
+excessive-nesting-threshold = 5
+
+# Type complexity threshold
+type-complexity-threshold = 250
+
+# Warn on TODO/FIXME comments in production code
+disallowed-macros = []
+
+# Maximum size for enum variants
+enum-variant-size-threshold = 200
+
+# Large error threshold (in bytes)
+large-error-threshold = 128
+
+# Maximum allowed cyclomatic complexity
+cyclomatic-complexity-threshold = 25
+
+# Whether to allow expect() in tests
+allow-expect-in-tests = true
+
+# Whether to allow unwrap() in tests
+allow-unwrap-in-tests = true
+
+# Whether to allow print! macros in tests
+allow-print-in-tests = true
+
+# Whether to allow dbg! macros
+allow-dbg-in-tests = true
+
+# Maximum includes for single file
+single-char-binding-names-threshold = 4

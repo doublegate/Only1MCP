@@ -1,0 +1,205 @@
+# Only1MCP Configuration - Solo Developer Template
+# Optimized for individual developers working locally
+# Minimal resource usage with essential features enabled
+
+version: "1.0"
+
+# Core proxy configuration
+proxy:
+  # Network binding - localhost only for security
+  host: 127.0.0.1
+  port: 8080
+
+  # Performance - auto-detect optimal settings
+  worker_threads: 0  # 0 = auto-detect CPU cores
+  max_connections: 100
+
+  # Timeouts
+  request_timeout: 30s
+  idle_timeout: 60s
+  shutdown_timeout: 10s
+
+# MCP Backend Servers
+servers:
+  - id: local-stdio
+    name: "Local STDIO MCP Server"
+    enabled: true
+    transport: stdio
+
+    # Command to execute
+    command: ["mcp-server"]
+    args: []
+
+    # Optional: working directory
+    # working_dir: /path/to/project
+
+    # Environment variables
+    env:
+      LOG_LEVEL: info
+      MCP_MODE: development
+
+    # Health check (minimal)
+    health_check:
+      enabled: false  # Disabled for local dev
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Example: Additional HTTP server
+  # - id: http-api
+  #   name: "HTTP API Server"
+  #   enabled: false
+  #   transport: http
+  #   endpoint: http://localhost:9001
+  #   health_check:
+  #     enabled: true
+  #     interval: 30s
+
+# Routing configuration
+routing:
+  # Simple round-robin for local development
+  strategy: round_robin
+
+  # Disable sticky sessions for simplicity
+  sticky_sessions:
+    enabled: false
+
+# Caching configuration - lightweight
+cache:
+  enabled: true
+
+  # L1 Cache - Tool Results (small, fast)
+  l1:
+    enabled: true
+    max_size: 50MB
+    ttl: 5m
+    eviction: lru
+
+  # L2 Cache - Resources (disabled for solo)
+  l2:
+    enabled: false
+
+  # L3 Cache - Prompts (disabled for solo)
+  l3:
+    enabled: false
+
+# Security - minimal for local development
+auth:
+  enabled: false  # No auth for local development
+
+  # Optional: Enable API key for local testing
+  # methods:
+  #   - api_key
+  # api_key:
+  #   header: "X-API-Key"
+  #   keys:
+  #     - key: "dev-key-123"
+  #       name: "Development Key"
+
+# Rate limiting - disabled for local
+rate_limit:
+  enabled: false
+
+# Logging configuration
+logging:
+  # Development-friendly output
+  level: info
+  format: pretty  # Human-readable format
+  output: stdout
+
+  # Optional: Enable debug for specific modules
+  modules:
+    only1mcp::proxy: debug
+    # only1mcp::cache: trace
+
+# Monitoring - minimal
+monitoring:
+  metrics:
+    enabled: false  # Disable for solo dev
+
+  tracing:
+    enabled: false  # Disable for solo dev
+
+  # Health endpoints (useful for testing)
+  health:
+    enabled: true
+    endpoints:
+      liveness: /health/live
+      readiness: /health/ready
+
+# Hot-reload for development
+hot_reload:
+  enabled: true
+  watch_interval: 1s
+  debounce: 500ms
+
+  # Only reload safe sections
+  reloadable:
+    - servers
+    - routing
+    - cache
+    - logging
+
+# Development features
+development:
+  # Enable debug endpoints
+  debug_endpoints: true
+
+  # Pretty-print JSON responses
+  pretty_json: true
+
+  # Verbose error messages
+  verbose_errors: true
+
+  # Request/response logging
+  log_requests: true
+  log_responses: false  # Can be verbose
+
+  # CORS for local development
+  cors:
+    enabled: true
+    allow_origins: ["*"]
+    allow_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers: ["*"]
+
+# Resource limits - generous for development
+limits:
+  # No hard limits for local development
+  max_request_size: 10MB
+  max_response_size: 50MB
+  max_websocket_message_size: 5MB
+
+  # Connection limits
+  max_connections_per_ip: 100
+
+  # Timeout overrides for debugging
+  debug_timeout_multiplier: 10  # 10x timeouts when debugging
+
+# Optional: TUI dashboard settings
+tui:
+  enabled: false  # Set to true to enable TUI
+  refresh_interval: 1s
+
+  # Sections to display
+  sections:
+    - overview
+    - servers
+    - requests
+    - logs
+
+# Notes for developers
+# ====================
+# 1. This configuration is optimized for local development
+# 2. Security features are disabled - DO NOT use in production
+# 3. To enable additional servers, uncomment and modify the examples
+# 4. For debugging, set logging.level to "debug" or "trace"
+# 5. Hot-reload is enabled - changes to this file apply immediately
+#
+# Quick Start:
+#   only1mcp start --config solo.yaml
+#
+# With debug logging:
+#   RUST_LOG=debug only1mcp start --config solo.yaml
+#
+# With TUI dashboard:
+#   only1mcp start --config solo.yaml --tui

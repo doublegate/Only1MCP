@@ -1,0 +1,137 @@
+[package]
+name = "only1mcp"
+version = "0.1.0"
+edition = "2021"
+authors = ["Only1MCP Team"]
+description = "The Ultimate MCP Server Aggregator - A unified proxy for Model Context Protocol servers"
+license = "GPL-3.0"
+repository = "https://github.com/doublegate/Only1MCP"
+homepage = "https://only1mcp.dev"
+keywords = ["mcp", "proxy", "aggregator", "ai", "llm"]
+categories = ["network-programming", "web-programming", "command-line-utilities"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+
+# HTTP server and client
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-server = { version = "0.6", features = ["tls-rustls"] }
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["full"] }
+hyper = { version = "1.0", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+
+# CLI
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-appender = "0.2"
+tracing-opentelemetry = "0.22"
+opentelemetry = { version = "0.21", features = ["metrics", "trace"] }
+opentelemetry_sdk = "0.21"
+opentelemetry-otlp = { version = "0.14", features = ["metrics", "trace"] }
+
+# Metrics
+prometheus = "0.13"
+metrics = "0.21"
+metrics-exporter-prometheus = "0.13"
+
+# Concurrency
+dashmap = "5.5"
+arc-swap = "1.6"
+parking_lot = "0.12"
+
+# Connection pooling
+bb8 = "0.8"
+
+# Hashing
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+sha2 = "0.10"
+
+# Authentication
+jsonwebtoken = "9.2"
+argon2 = "0.5"
+
+# TLS
+rustls = "0.22"
+rustls-pemfile = "2.0"
+
+# Configuration
+config = "0.14"
+figment = { version = "0.10", features = ["toml", "yaml", "env"] }
+
+# File watching for hot-reload
+notify = "6.1"
+
+# Process management
+nix = { version = "0.27", features = ["process"] }
+
+# Utilities
+anyhow = "1.0"
+thiserror = "1.0"
+once_cell = "1.19"
+bytes = "1.5"
+futures = "0.3"
+futures-util = "0.3"
+pin-project = "1.1"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+humantime = "2.1"
+dirs = "5.0"
+
+# WebSocket
+tokio-tungstenite = "0.21"
+
+# SSE (Server-Sent Events)
+async-sse = "5.1"
+eventsource-client = "0.12"
+
+# Compression
+flate2 = "1.0"
+zstd = "0.13"
+
+# Rate limiting
+governor = "0.6"
+
+# Circuit breaker
+failsafe = "1.3"
+
+# Random
+rand = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+proptest = "1.4"
+wiremock = "0.6"
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+
+[[bin]]
+name = "only1mcp"
+path = "src/main.rs"
+
+# [[bench]]
+# name = "proxy_benchmark"
+# harness = false
