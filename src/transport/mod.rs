@@ -6,9 +6,9 @@
 //! - SSE (server-sent events, deprecated)
 //! - WebSocket (full-duplex)
 
-pub mod stdio;
 pub mod http;
 pub mod sse;
+pub mod stdio;
 pub mod websocket;
 
 // TODO: Implement transport handlers

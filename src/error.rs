@@ -1,7 +1,13 @@
 //! Error types for Only1MCP
 
-use thiserror::Error;
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
+use serde_json::json;
 use std::io;
+use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -55,10 +61,9 @@ pub enum Error {
 
 impl Error {
     pub fn is_retryable(&self) -> bool {
-        matches!(self,
-            Error::BackendTimeout(_) |
-            Error::Transport(_) |
-            Error::Internal(_)
+        matches!(
+            self,
+            Error::BackendTimeout(_) | Error::Transport(_) | Error::Internal(_)
         )
     }
 
@@ -72,5 +77,65 @@ impl Error {
             Error::AuthFailed(_) => 401,
             _ => 500,
         }
+    }
+}
+
+/// Proxy-specific errors for HTTP handlers
+#[derive(Error, Debug)]
+pub enum ProxyError {
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
+
+    #[error("No backend available: {0}")]
+    NoBackendAvailable(String),
+
+    #[error("Backend error: {0}")]
+    BackendError(String),
+
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("Core error: {0}")]
+    Core(#[from] Error),
+}
+
+impl ProxyError {
+    pub fn is_retryable(&self) -> bool {
+        matches!(self, ProxyError::BackendError(_) | ProxyError::Timeout(_))
+    }
+}
+
+impl IntoResponse for ProxyError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match &self {
+            ProxyError::InvalidRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            ProxyError::NoBackendAvailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
+            ProxyError::BackendError(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
+            ProxyError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, msg.clone()),
+            ProxyError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            ProxyError::Json(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+            ProxyError::Core(err) => (
+                StatusCode::from_u16(err.status_code())
+                    .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+                err.to_string(),
+            ),
+        };
+
+        let body = Json(json!({
+            "jsonrpc": "2.0",
+            "error": {
+                "code": status.as_u16(),
+                "message": error_message,
+            },
+            "id": null
+        }));
+
+        (status, body).into_response()
     }
 }

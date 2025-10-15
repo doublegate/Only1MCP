@@ -1,11 +1,11 @@
 //! Circuit breakers prevent cascading failures by temporarily
 //! disabling requests to failing backends.
 
-use std::sync::atomic::{AtomicU32, AtomicI64, Ordering};
+use serde::Deserialize;
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use serde::Deserialize;
 use tracing;
 
 /// Circuit breaker state machine
@@ -95,10 +95,7 @@ impl CircuitBreaker {
             failure_count: Arc::new(AtomicU32::new(0)),
             success_count: Arc::new(AtomicU32::new(0)),
             last_state_change: Arc::new(AtomicI64::new(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
             )),
             config,
             listeners: Arc::new(RwLock::new(Vec::new())),
@@ -114,10 +111,7 @@ impl CircuitBreaker {
             CircuitState::Open => {
                 // Check if timeout expired
                 let last_change = self.last_state_change.load(Ordering::Relaxed);
-                let now = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64;
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
 
                 if now - last_change > self.config.timeout.as_secs() as i64 {
                     // Transition to half-open
@@ -127,14 +121,14 @@ impl CircuitBreaker {
                 } else {
                     false
                 }
-            }
+            },
             CircuitState::HalfOpen => {
                 // Allow limited requests for testing
                 let success = self.success_count.load(Ordering::Relaxed);
                 let failure = self.failure_count.load(Ordering::Relaxed);
 
                 (success + failure) < self.config.half_open_limit
-            }
+            },
         }
     }
 
@@ -146,7 +140,7 @@ impl CircuitBreaker {
             CircuitState::Closed => {
                 // Reset failure count on success
                 self.failure_count.store(0, Ordering::Relaxed);
-            }
+            },
             CircuitState::HalfOpen => {
                 let count = self.success_count.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -154,14 +148,11 @@ impl CircuitBreaker {
                     drop(state);
                     self.transition_to_closed().await;
                 }
-            }
+            },
             CircuitState::Open => {
                 // Shouldn't happen, but reset if it does
-                tracing::warn!(
-                    "Success recorded in open state for {}",
-                    self.backend_id
-                );
-            }
+                tracing::warn!("Success recorded in open state for {}", self.backend_id);
+            },
         }
     }
 
@@ -177,16 +168,16 @@ impl CircuitBreaker {
                     drop(state);
                     self.transition_to_open().await;
                 }
-            }
+            },
             CircuitState::HalfOpen => {
                 // Single failure in half-open returns to open
                 drop(state);
                 self.transition_to_open().await;
-            }
+            },
             CircuitState::Open => {
                 // Already open, update failure count for metrics
                 self.failure_count.fetch_add(1, Ordering::Relaxed);
-            }
+            },
         }
     }
 
@@ -209,10 +200,7 @@ impl CircuitBreaker {
         self.failure_count.store(0, Ordering::Relaxed);
         self.success_count.store(0, Ordering::Relaxed);
 
-        tracing::error!(
-            "Circuit breaker OPEN for backend {}",
-            self.backend_id
-        );
+        tracing::error!("Circuit breaker OPEN for backend {}", self.backend_id);
 
         // Notify listeners
         self.notify_listeners(CircuitState::Open).await;
@@ -257,11 +245,8 @@ impl CircuitBreaker {
     /// Update timestamp
     fn update_timestamp(&self) {
         self.last_state_change.store(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
-            Ordering::Relaxed
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            Ordering::Relaxed,
         );
     }
 

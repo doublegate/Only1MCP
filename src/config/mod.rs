@@ -2,13 +2,13 @@
 //!
 //! Handles loading, validation, and hot-reloading of configuration files.
 
+use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use crate::error::{Error, Result};
 
+pub mod loader;
 pub mod schema;
 pub mod validation;
-pub mod loader;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -170,23 +170,57 @@ pub struct LoggingConfig {
 }
 
 // Default functions
-fn default_host() -> String { "0.0.0.0".to_string() }
-fn default_port() -> u16 { 8080 }
-fn default_max_connections() -> usize { 10000 }
-fn default_true() -> bool { true }
-fn default_interval_seconds() -> u64 { 10 }
-fn default_timeout_seconds() -> u64 { 5 }
-fn default_priority() -> u32 { 100 }
-fn default_weight() -> u32 { 1 }
-fn default_algorithm() -> String { "round_robin".to_string() }
-fn default_virtual_nodes() -> usize { 150 }
-fn default_max_per_backend() -> usize { 100 }
-fn default_min_idle() -> usize { 10 }
-fn default_max_entries() -> usize { 10000 }
-fn default_ttl_seconds() -> u64 { 300 }
-fn default_max_batch_size() -> usize { 50 }
-fn default_log_level() -> String { "info".to_string() }
-fn default_log_format() -> String { "json".to_string() }
+fn default_host() -> String {
+    "0.0.0.0".to_string()
+}
+fn default_port() -> u16 {
+    8080
+}
+fn default_max_connections() -> usize {
+    10000
+}
+fn default_true() -> bool {
+    true
+}
+fn default_interval_seconds() -> u64 {
+    10
+}
+fn default_timeout_seconds() -> u64 {
+    5
+}
+fn default_priority() -> u32 {
+    100
+}
+fn default_weight() -> u32 {
+    1
+}
+fn default_algorithm() -> String {
+    "round_robin".to_string()
+}
+fn default_virtual_nodes() -> usize {
+    150
+}
+fn default_max_per_backend() -> usize {
+    100
+}
+fn default_min_idle() -> usize {
+    10
+}
+fn default_max_entries() -> usize {
+    10000
+}
+fn default_ttl_seconds() -> u64 {
+    300
+}
+fn default_max_batch_size() -> usize {
+    50
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_log_format() -> String {
+    "json".to_string()
+}
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -262,16 +296,17 @@ impl Config {
         let content = std::fs::read_to_string(path)
             .map_err(|e| Error::Config(format!("Failed to read config file: {}", e)))?;
 
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("yaml");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("yaml");
 
         match extension {
             "yaml" | "yml" => serde_yaml::from_str(&content)
                 .map_err(|e| Error::Config(format!("Failed to parse YAML: {}", e))),
             "toml" => toml::from_str(&content)
                 .map_err(|e| Error::Config(format!("Failed to parse TOML: {}", e))),
-            _ => Err(Error::Config(format!("Unsupported config format: {}", extension))),
+            _ => Err(Error::Config(format!(
+                "Unsupported config format: {}",
+                extension
+            ))),
         }
     }
 

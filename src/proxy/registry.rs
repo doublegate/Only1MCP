@@ -4,15 +4,15 @@
 //! see a consistent view while writers prepare updates in isolation.
 //! This achieves <1μs read latency even during configuration changes.
 
+use crate::config::Config;
+use crate::error::Error;
+use crate::proxy::router::ConsistentHashRing;
 use arc_swap::ArcSwap;
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use crate::config::Config;
-use crate::error::ProxyError;
-use crate::routing::consistent_hash::ConsistentHashRing;
 
 /// Thread-safe server registry with atomic updates
 pub struct AtomicRegistry {
@@ -240,10 +240,10 @@ impl AtomicRegistry {
 
         for handle in handles {
             match handle.await? {
-                Ok(_) => {}
+                Ok(_) => {},
                 Err((id, error)) => {
                     failed_servers.push((id, error));
-                }
+                },
             }
         }
 
@@ -350,11 +350,8 @@ async fn test_server_connectivity(config: &ServerConfig) -> Result<(), String> {
                 .build()
                 .map_err(|e| e.to_string())?;
 
-            client.get(&config.endpoint)
-                .send()
-                .await
-                .map_err(|e| e.to_string())?;
-        }
+            client.get(&config.endpoint).send().await.map_err(|e| e.to_string())?;
+        },
         TransportType::Stdio => {
             // Test that command exists
             if let Some(cmd) = &config.command {
@@ -363,10 +360,10 @@ async fn test_server_connectivity(config: &ServerConfig) -> Result<(), String> {
                 }
                 // Could attempt to spawn and immediately kill to test
             }
-        }
+        },
         _ => {
             // For other transports, assume connectivity is okay
-        }
+        },
     }
 
     Ok(())
@@ -379,20 +376,18 @@ mod tests {
     #[tokio::test]
     async fn test_atomic_registry() {
         let config = Config {
-            servers: vec![
-                ServerConfig {
-                    id: "server1".to_string(),
-                    name: "Test Server 1".to_string(),
-                    transport: TransportType::Http,
-                    endpoint: "http://localhost:8001".to_string(),
-                    command: None,
-                    env: None,
-                    working_dir: None,
-                    health_check: None,
-                    weight: 1,
-                    enabled: true,
-                },
-            ],
+            servers: vec![ServerConfig {
+                id: "server1".to_string(),
+                name: "Test Server 1".to_string(),
+                transport: TransportType::Http,
+                endpoint: "http://localhost:8001".to_string(),
+                command: None,
+                env: None,
+                working_dir: None,
+                health_check: None,
+                weight: 1,
+                enabled: true,
+            }],
             ..Default::default()
         };
 

@@ -15,16 +15,16 @@
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing::{info, error};
+use tracing::{error, info};
 
-mod config;
-mod proxy;
-mod transport;
 mod auth;
 mod cache;
-mod metrics;
-mod health;
+mod config;
 mod error;
+mod health;
+mod metrics;
+mod proxy;
+mod transport;
 
 use error::Result;
 
@@ -185,81 +185,91 @@ async fn main() -> Result<()> {
             info!("Starting proxy server on {}:{}", host, port);
             let server = proxy::ProxyServer::new(config).await?;
             server.run().await?;
-        }
+        },
 
-        Commands::Validate { config: config_path } => {
+        Commands::Validate {
+            config: config_path,
+        } => {
             info!("Validating configuration: {:?}", config_path);
             match config::Config::validate_file(&config_path) {
                 Ok(_) => {
                     println!("✓ Configuration valid");
                     std::process::exit(0);
-                }
+                },
                 Err(e) => {
                     eprintln!("✗ Configuration errors found:");
                     eprintln!("{}", e);
                     std::process::exit(1);
-                }
+                },
             }
-        }
+        },
 
         Commands::List => {
             println!("Configured MCP Servers:");
             for server in &config.servers {
-                println!("  - {} ({}): {:?}", server.id, server.name, server.transport);
+                println!(
+                    "  - {} ({}): {:?}",
+                    server.id, server.name, server.transport
+                );
             }
-        }
+        },
 
         Commands::Add { .. } => {
             println!("Server addition via CLI not yet implemented");
             println!("Please edit configuration file or use admin API");
-        }
+        },
 
         Commands::Remove { .. } => {
             println!("Server removal via CLI not yet implemented");
             println!("Please edit configuration file or use admin API");
-        }
+        },
 
         Commands::Test { id } => {
             println!("Testing connection to server: {}", id);
             // TODO: Implement connection test
-        }
+        },
 
         Commands::Status => {
             println!("Server health status:");
             println!("  (Status monitoring not yet implemented)");
-        }
+        },
 
         Commands::Logs { .. } => {
             println!("Log viewing not yet implemented");
-        }
+        },
 
         Commands::Config { action } => {
             match action {
                 ConfigCommands::Generate { template } => {
                     let template_content = generate_config_template(&template)?;
                     println!("{}", template_content);
-                }
+                },
                 ConfigCommands::Convert { from, to } => {
                     println!("Converting {} to {}", from.display(), to.display());
                     // TODO: Implement format conversion
-                }
+                },
                 ConfigCommands::Doctor => {
                     println!("Running configuration diagnostics...");
                     // TODO: Implement config doctor
-                }
+                },
             }
-        }
+        },
 
         Commands::Tui => {
             println!("TUI mode not yet implemented");
             println!("Coming in Phase 2!");
-        }
+        },
 
-        Commands::Benchmark { requests, concurrency } => {
-            println!("Running benchmark with {} requests and {} concurrent connections",
-                     requests, concurrency);
+        Commands::Benchmark {
+            requests,
+            concurrency,
+        } => {
+            println!(
+                "Running benchmark with {} requests and {} concurrent connections",
+                requests, concurrency
+            );
             // TODO: Implement benchmark
-        }
+        },
     }
 
     Ok(())
@@ -268,13 +278,9 @@ async fn main() -> Result<()> {
 fn init_tracing(log_level: &str) -> Result<()> {
     use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(log_level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(log_level));
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(fmt::layer())
-        .init();
+    tracing_subscriber::registry().with(filter).with(fmt::layer()).init();
 
     Ok(())
 }

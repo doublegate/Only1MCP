@@ -1,15 +1,18 @@
 //! JWT token creation, validation, and rotation with RS256 signatures.
 //! Implements secure token lifecycle management with refresh tokens.
 
-use jsonwebtoken::{encode, decode, Header, Algorithm, EncodingKey, DecodingKey, Validation, errors::Error as JwtError};
-use serde::{Serialize, Deserialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::time::Duration;
-use chrono::{Utc, DateTime};
-use uuid::Uuid;
+use chrono::{DateTime, Utc};
 use dashmap::DashSet;
+use jsonwebtoken::{
+    decode, encode, errors::Error as JwtError, Algorithm, DecodingKey, EncodingKey, Header,
+    Validation,
+};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 /// JWT error types
 #[derive(Debug, Error)]
@@ -167,7 +170,11 @@ impl JwtManager {
     }
 
     /// Create new JWT manager with RSA keys
-    pub fn new_with_rsa(config: JwtConfig, private_key: &[u8], public_key: &[u8]) -> Result<Self, Error> {
+    pub fn new_with_rsa(
+        config: JwtConfig,
+        private_key: &[u8],
+        public_key: &[u8],
+    ) -> Result<Self, Error> {
         let encoding_key = EncodingKey::from_rsa_pem(private_key)?;
         let decoding_key = DecodingKey::from_rsa_pem(public_key)?;
 
@@ -190,7 +197,8 @@ impl JwtManager {
         let claims = Claims {
             sub: identity.id.clone(),
             iat: now.timestamp(),
-            exp: (now + chrono::Duration::from_std(self.config.access_token_ttl).unwrap()).timestamp(),
+            exp: (now + chrono::Duration::from_std(self.config.access_token_ttl).unwrap())
+                .timestamp(),
             nbf: now.timestamp(),
             jti: jti.clone(),
             iss: self.config.issuer.clone(),
@@ -221,13 +229,14 @@ impl JwtManager {
         let claims = Claims {
             sub: identity.id.clone(),
             iat: now.timestamp(),
-            exp: (now + chrono::Duration::from_std(self.config.refresh_token_ttl).unwrap()).timestamp(),
+            exp: (now + chrono::Duration::from_std(self.config.refresh_token_ttl).unwrap())
+                .timestamp(),
             nbf: now.timestamp(),
             jti: jti.clone(),
             iss: self.config.issuer.clone(),
             aud: vec!["refresh".to_string()], // Special audience for refresh tokens
-            roles: vec![], // No roles in refresh token
-            permissions: vec![], // No permissions in refresh token
+            roles: vec![],                    // No roles in refresh token
+            permissions: vec![],              // No permissions in refresh token
             mfa_verified: identity.mfa_verified,
             sid: identity.session_id.clone(),
             client_id: identity.client_id.clone(),
@@ -289,7 +298,9 @@ impl JwtManager {
         let data = decode::<Claims>(token, &decoding_key, &validation)?;
 
         // Check if refresh token exists and is not revoked
-        if !self.refresh_tokens.contains(&data.claims.jti) || self.revoked.contains(&data.claims.jti) {
+        if !self.refresh_tokens.contains(&data.claims.jti)
+            || self.revoked.contains(&data.claims.jti)
+        {
             return Err(Error::InvalidToken);
         }
 
@@ -321,18 +332,18 @@ impl JwtManager {
                         "delete:*".to_string(),
                         "admin:*".to_string(),
                     ]);
-                }
+                },
                 "developer" => {
                     permissions.extend_from_slice(&[
                         "read:*".to_string(),
                         "write:code".to_string(),
                         "write:config".to_string(),
                     ]);
-                }
+                },
                 "viewer" => {
                     permissions.push("read:*".to_string());
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -355,7 +366,11 @@ impl JwtManager {
     }
 
     /// Rotate keys (for RSA key rotation)
-    pub async fn rotate_keys(&self, new_private_key: &[u8], new_public_key: &[u8]) -> Result<(), Error> {
+    pub async fn rotate_keys(
+        &self,
+        new_private_key: &[u8],
+        new_public_key: &[u8],
+    ) -> Result<(), Error> {
         tracing::info!("Starting key rotation");
 
         // Create new keys

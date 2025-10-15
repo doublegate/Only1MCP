@@ -13,37 +13,29 @@
 //! - Prometheus metrics and OpenTelemetry tracing
 
 use axum::{
-    Router,
-    extract::{State, Path, Query, Json},
-    http::{StatusCode, HeaderMap, Request, Response},
+    body::Body,
+    extract::{Json, Path, Query, State},
+    http::{HeaderMap, Request, Response, StatusCode},
     middleware::{self, from_fn_with_state},
     response::IntoResponse,
-    body::Body,
     routing::{get, post},
+    Router,
 };
-use tower::ServiceBuilder;
-use tower_http::{
-    compression::CompressionLayer,
-    cors::CorsLayer,
-    trace::TraceLayer,
-};
-use std::{
-    sync::Arc,
-    time::Duration,
-    net::SocketAddr,
-};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
-use tracing::{info, error, debug};
+use tower::ServiceBuilder;
+use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
+use tracing::{debug, error, info};
 
 use crate::{
-    config::Config,
-    error::{Result, Error},
-    proxy::{
-        registry::ServerRegistry,
-        handler::{handle_jsonrpc_request, handle_websocket_upgrade, health_check},
-    },
     cache::ResponseCache,
+    config::Config,
+    error::{Error, Result},
     metrics::Metrics,
+    proxy::{
+        handler::{handle_jsonrpc_request, handle_websocket_upgrade},
+        router::ServerRegistry,
+    },
 };
 
 /// Main proxy server structure containing all shared state and configuration.
@@ -84,16 +76,12 @@ impl ProxyServer {
         info!("Initializing Only1MCP proxy server");
 
         // Initialize shared application state
-        let registry = Arc::new(RwLock::new(
-            ServerRegistry::from_config(&config).await?
-        ));
+        let registry = Arc::new(RwLock::new(ServerRegistry::from_config(&config).await?));
 
-        let cache = Arc::new(
-            ResponseCache::new(
-                10000,  // max_entries
-                100 * 1024 * 1024,  // 100 MB max_size
-            )
-        );
+        let cache = Arc::new(ResponseCache::new(
+            10000,             // max_entries
+            100 * 1024 * 1024, // 100 MB max_size
+        ));
 
         let metrics = Arc::new(Metrics::new());
 
@@ -128,12 +116,12 @@ impl ProxyServer {
             .route("/ws", get(handle_websocket_upgrade))
 
             // Health check
-            .route("/health", get(health_check));
+            .route("/health", get(health_check_handler));
 
         // Management API routes
         let admin_routes = Router::new()
-            .route("/health", get(health_check))
-            .route("/metrics", get(crate::metrics::prometheus_metrics));
+            .route("/health", get(health_check_handler))
+            .route("/metrics", get(crate::metrics::metrics_handler));
 
         // Combine routes with middleware stack
         Router::new()
@@ -151,7 +139,7 @@ impl ProxyServer {
                     .layer(tower::timeout::TimeoutLayer::new(Duration::from_secs(30)))
 
                     // Request/response tracing
-                    .layer(TraceLayer::new_for_http())
+                    .layer(TraceLayer::new_for_http()),
             )
             .with_state(app_state)
     }
@@ -168,7 +156,8 @@ impl ProxyServer {
         info!("Starting Only1MCP proxy server on {}", addr);
 
         // Create TCP listener
-        let listener = tokio::net::TcpListener::bind(addr).await
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
             .map_err(|e| Error::Server(format!("Failed to bind: {}", e)))?;
 
         info!("Server listening on {}", addr);
@@ -190,4 +179,25 @@ impl ProxyServer {
     pub fn shutdown(&self) {
         let _ = self.shutdown_tx.send(());
     }
+}
+
+/// Health check endpoint handler
+async fn health_check_handler(State(state): State<AppState>) -> impl IntoResponse {
+    use axum::http::StatusCode;
+    use serde_json::json;
+
+    // Check if registry has any servers
+    let registry = state.registry.read().await;
+    let server_count = registry.servers.len();
+
+    let status = if server_count > 0 { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
+
+    (
+        status,
+        axum::Json(json!({
+            "status": if status == StatusCode::OK { "healthy" } else { "unhealthy" },
+            "servers": server_count,
+            "version": env!("CARGO_PKG_VERSION"),
+        })),
+    )
 }

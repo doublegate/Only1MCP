@@ -5,8 +5,8 @@ use crate::error::{Error, Result};
 use crate::types::ServerId;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
@@ -132,10 +132,7 @@ impl HealthChecker {
             failure_threshold: config.failure_threshold,
             success_threshold: config.success_threshold,
             status: Arc::new(RwLock::new(HealthStatus::new())),
-            http_client: reqwest::Client::builder()
-                .timeout(config.timeout)
-                .build()
-                .unwrap(),
+            http_client: reqwest::Client::builder().timeout(config.timeout).build().unwrap(),
             shutdown: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -174,9 +171,7 @@ impl HealthChecker {
                 .timeout(self.timeout)
         } else {
             // Generic HTTP health check
-            self.http_client
-                .get(&self.endpoint)
-                .timeout(self.timeout)
+            self.http_client.get(&self.endpoint).timeout(self.timeout)
         };
 
         match request.send().await {
@@ -202,7 +197,7 @@ impl HealthChecker {
                         latency: Some(latency),
                     }
                 }
-            }
+            },
             Err(e) => {
                 let latency = start.elapsed();
 
@@ -216,7 +211,7 @@ impl HealthChecker {
                     },
                     latency: Some(latency),
                 }
-            }
+            },
         }
     }
 
@@ -231,8 +226,8 @@ impl HealthChecker {
                 status.failure_count = 0;
 
                 // Update latency moving average
-                status.avg_latency = (status.avg_latency * 0.9) +
-                    (latency.as_millis() as f64 * 0.1);
+                status.avg_latency =
+                    (status.avg_latency * 0.9) + (latency.as_millis() as f64 * 0.1);
 
                 // Update error rate (exponential decay)
                 status.error_rate *= 0.95;
@@ -249,7 +244,7 @@ impl HealthChecker {
                     }
                     status.state = HealthState::Healthy;
                 }
-            }
+            },
             HealthCheckResult::Failure { reason, latency: _ } => {
                 status.last_failure = Some(Instant::now());
                 status.failure_count += 1;
@@ -259,11 +254,7 @@ impl HealthChecker {
                 status.error_rate = (status.error_rate * 0.9) + 0.1;
 
                 // Log failure reason
-                warn!(
-                    "Health check failed for {}: {}",
-                    self.backend_id,
-                    reason
-                );
+                warn!("Health check failed for {}: {}", self.backend_id, reason);
 
                 // Determine state based on thresholds
                 if status.failure_count >= self.failure_threshold {
@@ -274,7 +265,7 @@ impl HealthChecker {
                 } else if status.failure_count > 0 {
                     status.state = HealthState::Degraded;
                 }
-            }
+            },
         }
 
         // Emit metrics
@@ -326,13 +317,9 @@ impl PassiveHealthMonitor {
     }
 
     /// Record request outcome for passive monitoring
-    pub async fn record_request(
-        &self,
-        backend_id: &str,
-        success: bool,
-        latency: Duration,
-    ) {
-        let mut stats = self.request_stats
+    pub async fn record_request(&self, backend_id: &str, success: bool, latency: Duration) {
+        let mut stats = self
+            .request_stats
             .entry(backend_id.to_string())
             .or_insert_with(RequestStats::new);
 
@@ -340,9 +327,7 @@ impl PassiveHealthMonitor {
 
         // Check if circuit breaker should trip
         if stats.should_trip_circuit_breaker(&self.config) {
-            self.circuit_breakers
-                .trip(backend_id)
-                .await;
+            self.circuit_breakers.trip(backend_id).await;
 
             warn!(
                 "Circuit breaker tripped for {} (error_rate: {:.2}%, latency: {:?})",
@@ -454,10 +439,7 @@ impl RequestStats {
             self.failure_count.fetch_add(1, Ordering::Relaxed);
         }
 
-        self.total_latency_ms.fetch_add(
-            latency.as_millis() as u64,
-            Ordering::Relaxed
-        );
+        self.total_latency_ms.fetch_add(latency.as_millis() as u64, Ordering::Relaxed);
 
         // Store latency for percentile calculations
         if let Ok(mut latencies) = self.latencies.try_write() {
@@ -471,8 +453,8 @@ impl RequestStats {
     }
 
     pub fn error_rate(&self) -> f64 {
-        let total = self.success_count.load(Ordering::Relaxed) +
-                   self.failure_count.load(Ordering::Relaxed);
+        let total =
+            self.success_count.load(Ordering::Relaxed) + self.failure_count.load(Ordering::Relaxed);
 
         if total == 0 {
             0.0

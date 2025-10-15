@@ -240,10 +240,8 @@ impl LoadBalancer {
         let healthy_servers: Vec<ServerId> = eligible_servers
             .iter()
             .filter(|&id| {
-                self.health_states
-                    .get(id)
-                    .map(|state| state.is_healthy())
-                    .unwrap_or(true) // Consider new servers as healthy
+                self.health_states.get(id).map(|state| state.is_healthy()).unwrap_or(true)
+                // Consider new servers as healthy
             })
             .cloned()
             .collect();
@@ -277,32 +275,20 @@ impl LoadBalancer {
     /// Apply the routing algorithm
     async fn route(&self, servers: &[ServerId], key: &str) -> Result<ServerId> {
         match self.config.algorithm {
-            RoutingAlgorithm::ConsistentHash => {
-                self.route_consistent_hash(key, servers)
-            }
-            RoutingAlgorithm::LeastConnections => {
-                self.route_least_connections(servers)
-            }
-            RoutingAlgorithm::RoundRobin => {
-                self.route_round_robin(servers)
-            }
-            RoutingAlgorithm::Random => {
-                self.route_random(servers)
-            }
+            RoutingAlgorithm::ConsistentHash => self.route_consistent_hash(key, servers),
+            RoutingAlgorithm::LeastConnections => self.route_least_connections(servers),
+            RoutingAlgorithm::RoundRobin => self.route_round_robin(servers),
+            RoutingAlgorithm::Random => self.route_random(servers),
             RoutingAlgorithm::WeightedRandom => {
                 // For now, treat as regular random
                 // TODO: Implement weight-based selection
                 self.route_random(servers)
-            }
+            },
         }
     }
 
     /// Consistent hashing with virtual nodes
-    fn route_consistent_hash(
-        &self,
-        key: &str,
-        servers: &[ServerId],
-    ) -> Result<ServerId> {
+    fn route_consistent_hash(&self, key: &str, servers: &[ServerId]) -> Result<ServerId> {
         let hash_ring = self.hash_ring.load();
 
         // Hash the routing key
@@ -320,10 +306,7 @@ impl LoadBalancer {
     }
 
     /// Least connections using Power of Two Choices
-    fn route_least_connections(
-        &self,
-        servers: &[ServerId],
-    ) -> Result<ServerId> {
+    fn route_least_connections(&self, servers: &[ServerId]) -> Result<ServerId> {
         use rand::seq::SliceRandom;
 
         if servers.len() == 1 {
@@ -332,9 +315,7 @@ impl LoadBalancer {
 
         // Power of Two Choices algorithm
         let mut rng = rand::thread_rng();
-        let candidates: Vec<_> = servers
-            .choose_multiple(&mut rng, 2.min(servers.len()))
-            .collect();
+        let candidates: Vec<_> = servers.choose_multiple(&mut rng, 2.min(servers.len())).collect();
 
         // Select server with minimum connections
         let selected = candidates
@@ -416,13 +397,9 @@ impl LoadBalancer {
     }
 
     /// Update health state for a server
-    pub fn update_health(
-        &self,
-        server_id: &ServerId,
-        success: bool,
-        latency: Duration,
-    ) {
-        let health = self.health_states
+    pub fn update_health(&self, server_id: &ServerId, success: bool, latency: Duration) {
+        let health = self
+            .health_states
             .entry(server_id.clone())
             .or_insert_with(|| HealthState::new());
 
@@ -448,7 +425,8 @@ impl LoadBalancer {
             let server_id = entry.key().clone();
             let health = entry.value();
 
-            let connections = self.connection_counts
+            let connections = self
+                .connection_counts
                 .get(&server_id)
                 .map(|c| c.load(Ordering::Relaxed))
                 .unwrap_or(0);
@@ -517,19 +495,13 @@ impl ConsistentHashRing {
     }
 
     /// Find the server responsible for a given hash
-    pub fn get_server(
-        &self,
-        hash: u64,
-        eligible_servers: &[ServerId],
-    ) -> Option<&ServerId> {
+    pub fn get_server(&self, hash: u64, eligible_servers: &[ServerId]) -> Option<&ServerId> {
         // Find the first node with hash >= input hash
         let start_iter = self.ring.range(hash..).map(|(_, (id, _))| id);
         let wrap_iter = self.ring.iter().map(|(_, (id, _))| id);
 
         // Check servers in order starting from hash position
-        start_iter
-            .chain(wrap_iter)
-            .find(|&id| eligible_servers.contains(id))
+        start_iter.chain(wrap_iter).find(|&id| eligible_servers.contains(id))
     }
 }
 
@@ -548,7 +520,11 @@ mod tests {
         };
 
         let lb = LoadBalancer::new(config);
-        let servers = vec!["server1".to_string(), "server2".to_string(), "server3".to_string()];
+        let servers = vec![
+            "server1".to_string(),
+            "server2".to_string(),
+            "server3".to_string(),
+        ];
 
         // Should cycle through servers
         let s1 = lb.select_server("key1", &servers, None).await.unwrap();
@@ -596,7 +572,11 @@ mod tests {
         };
 
         let lb = LoadBalancer::new(config);
-        let servers = vec!["server1".to_string(), "server2".to_string(), "server3".to_string()];
+        let servers = vec![
+            "server1".to_string(),
+            "server2".to_string(),
+            "server3".to_string(),
+        ];
 
         // Add servers to hash ring
         for server in &servers {
@@ -623,7 +603,11 @@ mod tests {
         };
 
         let lb = LoadBalancer::new(config);
-        let servers = vec!["server1".to_string(), "server2".to_string(), "server3".to_string()];
+        let servers = vec![
+            "server1".to_string(),
+            "server2".to_string(),
+            "server3".to_string(),
+        ];
 
         // First request with session ID
         let s1 = lb.select_server("key1", &servers, Some("session123")).await.unwrap();

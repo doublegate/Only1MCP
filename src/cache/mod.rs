@@ -8,11 +8,11 @@
 use crate::error::{Error, Result};
 use crate::types::{McpRequest, McpResponse};
 use dashmap::DashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use serde::{Deserialize, Serialize};
 use std::future::Future;
-use serde::{Serialize, Deserialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::{debug, info};
 
 /// Multi-layer caching system with different TTLs per operation type.
@@ -236,13 +236,12 @@ impl LayeredCache {
         cache: Arc<DashMap<CacheKey, CachedResponse>>,
         needed_bytes: usize,
     ) {
-        let current_size: usize = cache.iter()
-            .map(|entry| entry.value().size_bytes)
-            .sum();
+        let current_size: usize = cache.iter().map(|entry| entry.value().size_bytes).sum();
 
         if current_size + needed_bytes > self.config.max_cache_bytes {
             // Find least recently used entries
-            let mut entries: Vec<_> = cache.iter()
+            let mut entries: Vec<_> = cache
+                .iter()
                 .map(|entry| (entry.key().clone(), entry.value().created_at))
                 .collect();
 
@@ -267,21 +266,20 @@ impl LayeredCache {
     /// Check if a request/response pair should be cached.
     fn is_cacheable(&self, request: &McpRequest, _response: &McpResponse) -> bool {
         // Don't cache mutations or sensitive operations
-        !matches!(request.method().as_str(),
+        !matches!(
+            request.method().as_str(),
             "resources/write" | "resources/delete" | "auth/*" | "admin/*"
         )
     }
 
     /// Serialize response for storage.
     fn serialize_response(&self, response: &McpResponse) -> Result<Vec<u8>> {
-        serde_json::to_vec(response)
-            .map_err(|e| Error::Serialization(e.to_string()))
+        serde_json::to_vec(response).map_err(|e| Error::Serialization(e.to_string()))
     }
 
     /// Deserialize response from storage.
     fn deserialize_response(&self, data: &[u8]) -> Result<McpResponse> {
-        serde_json::from_slice(data)
-            .map_err(|e| Error::Deserialization(e.to_string()))
+        serde_json::from_slice(data).map_err(|e| Error::Deserialization(e.to_string()))
     }
 
     /// Generate ETag for cache validation.
@@ -341,15 +339,15 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             l1_capacity: 1000,
-            l1_ttl: Duration::from_secs(300),      // 5 minutes
+            l1_ttl: Duration::from_secs(300), // 5 minutes
 
             l2_capacity: 500,
-            l2_ttl: Duration::from_secs(1800),     // 30 minutes
+            l2_ttl: Duration::from_secs(1800), // 30 minutes
 
             l3_capacity: 200,
-            l3_ttl: Duration::from_secs(7200),     // 2 hours
+            l3_ttl: Duration::from_secs(7200), // 2 hours
 
-            max_cache_bytes: 100 * 1024 * 1024,    // 100 MB
+            max_cache_bytes: 100 * 1024 * 1024, // 100 MB
 
             namespace: None,
         }

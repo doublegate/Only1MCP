@@ -2,16 +2,29 @@
 //! Supports role inheritance, attribute-based access control (ABAC),
 //! and policy-based access control (PBAC).
 
+use async_trait::async_trait;
+use chrono::{DateTime, Local, Timelike, Utc, Weekday};
+use ipnetwork::IpNetwork;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::net::IpAddr;
-use async_trait::async_trait;
-use chrono::{DateTime, Utc, Local, Timelike, Weekday};
-use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use thiserror::Error;
-use ipnetwork::IpNetwork;
+use tokio::sync::RwLock;
+
+// Helper macro for creating permission sets (defined at end of file)
+macro_rules! hashset {
+    ( $( $x:expr ),* $(,)? ) => {
+        {
+            let mut set = HashSet::new();
+            $(
+                set.insert($x);
+            )*
+            set
+        }
+    };
+}
 
 /// RBAC error types
 #[derive(Debug, Error)]
@@ -46,7 +59,7 @@ pub enum Permission {
     ServerExecute,
 
     // Tool permissions (can be wildcarded)
-    ToolExecute(String),  // e.g., "db_query", "*" for all
+    ToolExecute(String), // e.g., "db_query", "*" for all
     ToolRead(String),
     ToolModify(String),
 
@@ -74,7 +87,7 @@ pub struct Role {
     pub name: String,
     pub description: String,
     pub permissions: HashSet<Permission>,
-    pub inherits_from: Vec<String>,  // Role inheritance
+    pub inherits_from: Vec<String>, // Role inheritance
     pub constraints: RoleConstraints,
 }
 
@@ -291,7 +304,8 @@ impl AuthorizationEngine {
 
         // Get user's roles
         let assignments = self.assignments.read().await;
-        let user_roles = assignments.get(user_id)
+        let user_roles = assignments
+            .get(user_id)
             .ok_or_else(|| AuthzError::UserNotFound(user_id.to_string()))?;
 
         // Check each role (including inherited)
@@ -303,7 +317,7 @@ impl AuthorizationEngine {
                 &roles,
                 role_id,
                 &mut effective_permissions,
-                &mut HashSet::new()  // Cycle detection
+                &mut HashSet::new(), // Cycle detection
             )?;
         }
 
@@ -314,38 +328,41 @@ impl AuthorizationEngine {
         if !authorized {
             match permission {
                 Permission::ToolExecute(tool) => {
-                    authorized = effective_permissions.contains(&Permission::ToolExecute("*".to_string()));
-                }
+                    authorized =
+                        effective_permissions.contains(&Permission::ToolExecute("*".to_string()));
+                },
                 Permission::ToolRead(tool) => {
-                    authorized = effective_permissions.contains(&Permission::ToolRead("*".to_string()));
-                }
+                    authorized =
+                        effective_permissions.contains(&Permission::ToolRead("*".to_string()));
+                },
                 Permission::ToolModify(tool) => {
-                    authorized = effective_permissions.contains(&Permission::ToolModify("*".to_string()));
-                }
-                _ => {}
+                    authorized =
+                        effective_permissions.contains(&Permission::ToolModify("*".to_string()));
+                },
+                _ => {},
             }
         }
 
         // Apply dynamic policies
         if authorized {
-            authorized = self.policy_engine.evaluate(
-                user_id,
-                permission,
-                context,
-                &effective_permissions
-            ).await?;
+            authorized = self
+                .policy_engine
+                .evaluate(user_id, permission, context, &effective_permissions)
+                .await?;
         }
 
         // Audit the decision
         let reason = self.policy_engine.last_evaluation_reason().await;
-        self.audit.log_authorization(AuthzEvent {
-            timestamp: Utc::now(),
-            user_id: user_id.to_string(),
-            permission: permission.clone(),
-            context: context.clone(),
-            decision: if authorized { Decision::Allow } else { Decision::Deny },
-            reason,
-        }).await?;
+        self.audit
+            .log_authorization(AuthzEvent {
+                timestamp: Utc::now(),
+                user_id: user_id.to_string(),
+                permission: permission.clone(),
+                context: context.clone(),
+                decision: if authorized { Decision::Allow } else { Decision::Deny },
+                reason,
+            })
+            .await?;
 
         // Cache the result
         self.permission_cache.insert(cache_key, authorized).await;
@@ -366,7 +383,8 @@ impl AuthorizationEngine {
             return Err(AuthzError::RoleCycle(role_id.to_string()));
         }
 
-        let role = roles.get(role_id)
+        let role = roles
+            .get(role_id)
             .ok_or_else(|| AuthzError::RoleNotFound(role_id.to_string()))?;
 
         // Add direct permissions
@@ -381,9 +399,13 @@ impl AuthorizationEngine {
     }
 
     /// Get all permissions for a user
-    pub async fn get_user_permissions(&self, user_id: &str) -> Result<HashSet<Permission>, AuthzError> {
+    pub async fn get_user_permissions(
+        &self,
+        user_id: &str,
+    ) -> Result<HashSet<Permission>, AuthzError> {
         let assignments = self.assignments.read().await;
-        let user_roles = assignments.get(user_id)
+        let user_roles = assignments
+            .get(user_id)
             .ok_or_else(|| AuthzError::UserNotFound(user_id.to_string()))?;
 
         let roles = self.roles.read().await;
@@ -440,7 +462,7 @@ impl PolicyEngine {
                     reason = policy_reason;
                     *self.last_reason.write().await = reason.clone();
                     return Ok(false);
-                }
+                },
             }
         }
 
@@ -493,17 +515,16 @@ impl Policy for TimeBasedPolicy {
             let current_day = now.weekday();
 
             // Check business hours
-            if current_time < restriction.start_time ||
-               current_time > restriction.end_time {
+            if current_time < restriction.start_time || current_time > restriction.end_time {
                 return Ok(PolicyDecision::Deny(
-                    "Access outside business hours".to_string()
+                    "Access outside business hours".to_string(),
                 ));
             }
 
             // Check weekdays
             if !restriction.allowed_days.contains(&current_day) {
                 return Ok(PolicyDecision::Deny(
-                    "Access not allowed on this day".to_string()
+                    "Access not allowed on this day".to_string(),
                 ));
             }
         }
@@ -561,15 +582,15 @@ impl Policy for MfaPolicy {
         // Check if permission requires MFA
         let requires_mfa = matches!(
             permission,
-            Permission::AdminUserManage |
-            Permission::AdminRoleManage |
-            Permission::AdminSystemConfig |
-            Permission::EmergencyAccess
+            Permission::AdminUserManage
+                | Permission::AdminRoleManage
+                | Permission::AdminSystemConfig
+                | Permission::EmergencyAccess
         );
 
         if requires_mfa && !context.mfa_verified {
             return Ok(PolicyDecision::Deny(
-                "MFA verification required for this action".to_string()
+                "MFA verification required for this action".to_string(),
             ));
         }
 

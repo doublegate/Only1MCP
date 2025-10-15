@@ -114,6 +114,12 @@ failsafe = "1.3"
 # Random
 rand = "0.8"
 
+# URL parsing
+url = "2.5"
+
+# System info
+sys-info = "0.9"
+
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

@@ -3,12 +3,12 @@
 //! Handles JSON-RPC requests, tool discovery, resource management,
 //! and WebSocket upgrades for the MCP protocol.
 
-use crate::error::{Error, Result};
-use crate::proxy::{AppState, ProxyError, RequestRouter, ServerRegistry};
+use crate::error::{Error, ProxyError, Result};
+use crate::proxy::router::{RequestRouter, ServerRegistry};
+use crate::proxy::server::AppState;
 use crate::types::{McpRequest, McpResponse, Tool};
-use crate::cache::ResponseCache;
 use axum::{
-    extract::{State, ws::WebSocketUpgrade},
+    extract::{ws::WebSocketUpgrade, State},
     response::Response,
     Json,
 };
@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Handle generic JSON-RPC requests.
 #[instrument(skip(state, payload))]
@@ -25,8 +25,8 @@ pub async fn handle_jsonrpc_request(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, ProxyError> {
     // Parse request
-    let request: McpRequest = serde_json::from_value(payload)
-        .map_err(|e| ProxyError::InvalidRequest(e.to_string()))?;
+    let request: McpRequest =
+        serde_json::from_value(payload).map_err(|e| ProxyError::InvalidRequest(e.to_string()))?;
 
     // Route to appropriate handler based on method
     let response = match request.method().as_str() {
@@ -41,17 +41,14 @@ pub async fn handle_jsonrpc_request(
         _ => {
             // Unknown method, try to route to a backend
             route_generic_request(state, request).await?
-        }
+        },
     };
 
     Ok(Json(response))
 }
 
 /// Handle tools/list request with aggregation.
-async fn handle_tools_list_impl(
-    state: AppState,
-    request: McpRequest,
-) -> Result<Value, ProxyError> {
+async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Check cache
@@ -108,12 +105,19 @@ async fn handle_tools_list_impl(
     });
 
     // Cache response (5 minute TTL)
-    let _ = state.cache.get_or_compute(&request, || async {
-        Ok(McpResponse::from_value(response.clone())?)
-    }).await;
+    let _ = state
+        .cache
+        .get_or_compute(&request, || async {
+            Ok(McpResponse::from_value(response.clone())?)
+        })
+        .await;
 
     state.metrics.tools_list_duration.record(start.elapsed().as_secs_f64());
-    info!("Aggregated {} tools from {} servers", all_tools.len(), results.len());
+    info!(
+        "Aggregated {} tools from {} servers",
+        all_tools.len(),
+        results.len()
+    );
     Ok(response)
 }
 
@@ -126,14 +130,12 @@ pub async fn handle_tools_call(
     handle_tools_call_impl(state, request).await.map(Json)
 }
 
-async fn handle_tools_call_impl(
-    state: AppState,
-    request: McpRequest,
-) -> Result<Value, ProxyError> {
+async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Extract tool name
-    let tool_name = request.params()
+    let tool_name = request
+        .params()
         .get("name")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing tool name".into()))?;
@@ -142,25 +144,22 @@ async fn handle_tools_call_impl(
 
     // Route request
     let router = RequestRouter::new(state.config.proxy.routing.clone());
-    let (server_id, _) = router.route_request(
-        &request,
-        &*state.registry.read().await,
-        &state.cache
-    ).await?;
+    let (server_id, _) = router
+        .route_request(&request, &*state.registry.read().await, &state.cache)
+        .await?;
 
     // Get server configuration
     let registry = state.registry.read().await;
-    let server = registry.get_server(&server_id)
+    let server = registry
+        .get_server(&server_id)
         .ok_or_else(|| ProxyError::NoBackendAvailable(tool_name.to_string()))?;
 
     // Execute with retry
-    let response = execute_with_retry(|| {
-        send_request_to_backend(
-            state.clone(),
-            server.clone(),
-            request.clone(),
-        )
-    }, 3).await?;
+    let response = execute_with_retry(
+        || send_request_to_backend(state.clone(), server.clone(), request.clone()),
+        3,
+    )
+    .await?;
 
     state.metrics.tools_call_duration.record(start.elapsed().as_secs_f64());
     info!("Tool {} executed in {:?}", tool_name, start.elapsed());
@@ -230,7 +229,8 @@ async fn handle_resources_read_impl(
     state: AppState,
     request: McpRequest,
 ) -> Result<Value, ProxyError> {
-    let uri = request.params()
+    let uri = request
+        .params()
         .get("uri")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing resource URI".into()))?;
@@ -239,14 +239,13 @@ async fn handle_resources_read_impl(
 
     // Route to server that has this resource
     let router = RequestRouter::new(state.config.proxy.routing.clone());
-    let (server_id, _) = router.route_request(
-        &request,
-        &*state.registry.read().await,
-        &state.cache
-    ).await?;
+    let (server_id, _) = router
+        .route_request(&request, &*state.registry.read().await, &state.cache)
+        .await?;
 
     let registry = state.registry.read().await;
-    let server = registry.get_server(&server_id)
+    let server = registry
+        .get_server(&server_id)
         .ok_or_else(|| ProxyError::NoBackendAvailable(uri.to_string()))?;
 
     send_request_to_backend(state, server, request).await
@@ -267,7 +266,8 @@ async fn handle_resources_subscribe_impl(
 ) -> Result<Value, ProxyError> {
     // For subscriptions, we need to establish a persistent connection
     // This would typically upgrade to WebSocket or SSE
-    let uri = request.params()
+    let uri = request
+        .params()
         .get("uri")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing resource URI".into()))?;
@@ -342,7 +342,8 @@ async fn handle_prompts_get_impl(
     state: AppState,
     request: McpRequest,
 ) -> Result<Value, ProxyError> {
-    let name = request.params()
+    let name = request
+        .params()
         .get("name")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing prompt name".into()))?;
@@ -351,14 +352,13 @@ async fn handle_prompts_get_impl(
 
     // Route to appropriate server
     let router = RequestRouter::new(state.config.proxy.routing.clone());
-    let (server_id, _) = router.route_request(
-        &request,
-        &*state.registry.read().await,
-        &state.cache
-    ).await?;
+    let (server_id, _) = router
+        .route_request(&request, &*state.registry.read().await, &state.cache)
+        .await?;
 
     let registry = state.registry.read().await;
-    let server = registry.get_server(&server_id)
+    let server = registry
+        .get_server(&server_id)
         .ok_or_else(|| ProxyError::NoBackendAvailable(name.to_string()))?;
 
     send_request_to_backend(state, server, request).await
@@ -379,14 +379,13 @@ async fn handle_sampling_create_impl(
 ) -> Result<Value, ProxyError> {
     // Route to a capable server
     let router = RequestRouter::new(state.config.proxy.routing.clone());
-    let (server_id, _) = router.route_request(
-        &request,
-        &*state.registry.read().await,
-        &state.cache
-    ).await?;
+    let (server_id, _) = router
+        .route_request(&request, &*state.registry.read().await, &state.cache)
+        .await?;
 
     let registry = state.registry.read().await;
-    let server = registry.get_server(&server_id)
+    let server = registry
+        .get_server(&server_id)
         .ok_or_else(|| ProxyError::NoBackendAvailable("sampling".to_string()))?;
 
     send_request_to_backend(state, server, request).await
@@ -406,27 +405,21 @@ async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState)
 }
 
 /// Handle Server-Sent Events stream.
-pub async fn handle_sse_stream(
-    State(state): State<AppState>,
-) -> Result<Response, ProxyError> {
+pub async fn handle_sse_stream(State(state): State<AppState>) -> Result<Response, ProxyError> {
     // TODO: Implement SSE for server push
     Ok(Response::new("SSE endpoint".into()))
 }
 
 /// Route generic/unknown requests to appropriate backend.
-async fn route_generic_request(
-    state: AppState,
-    request: McpRequest,
-) -> Result<Value, ProxyError> {
+async fn route_generic_request(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
     let router = RequestRouter::new(state.config.proxy.routing.clone());
-    let (server_id, _) = router.route_request(
-        &request,
-        &*state.registry.read().await,
-        &state.cache
-    ).await?;
+    let (server_id, _) = router
+        .route_request(&request, &*state.registry.read().await, &state.cache)
+        .await?;
 
     let registry = state.registry.read().await;
-    let server = registry.get_server(&server_id)
+    let server = registry
+        .get_server(&server_id)
         .ok_or_else(|| ProxyError::NoBackendAvailable(request.method()))?;
 
     send_request_to_backend(state, server, request).await
@@ -474,10 +467,7 @@ async fn send_request_to_backend(
     }))
 }
 
-async fn execute_with_retry<F, Fut>(
-    f: F,
-    max_retries: u32,
-) -> Result<Value, ProxyError>
+async fn execute_with_retry<F, Fut>(f: F, max_retries: u32) -> Result<Value, ProxyError>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<Value, ProxyError>>,
@@ -490,7 +480,7 @@ where
                 attempts += 1;
                 warn!("Retry attempt {} after error: {}", attempts, e);
                 tokio::time::sleep(Duration::from_millis(100 * attempts as u64)).await;
-            }
+            },
             Err(e) => return Err(e),
         }
     }

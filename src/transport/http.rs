@@ -7,12 +7,12 @@
 use async_trait::async_trait;
 use bb8::{ManageConnection, Pool};
 use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use serde_json::Value;
+
+use crate::types::{McpRequest, McpResponse};
 
 /// HTTP transport errors
 #[derive(Error, Debug)]
@@ -40,35 +40,6 @@ pub enum HttpError {
 
     #[error("Server error: {0}")]
     ServerError(String),
-}
-
-/// MCP request structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpRequest {
-    pub jsonrpc: String,
-    pub id: Option<Value>,
-    pub method: String,
-    pub params: Option<Value>,
-}
-
-/// MCP response structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpResponse {
-    pub jsonrpc: String,
-    pub id: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<McpError>,
-}
-
-/// MCP error structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct McpError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
 }
 
 /// HTTP transport configuration
@@ -152,7 +123,8 @@ impl ManageConnection for HttpConnectionManager {
         // Test connection with health check
         let health_url = format!("{}/health", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&health_url)
             .timeout(self.timeout)
             .send()
@@ -184,7 +156,8 @@ impl ManageConnection for HttpConnectionManager {
         }
 
         // Perform quick health check
-        let response = conn.client
+        let response = conn
+            .client
             .head(&format!("{}/health", conn.base_url))
             .timeout(Duration::from_secs(1))
             .send()
@@ -200,8 +173,8 @@ impl ManageConnection for HttpConnectionManager {
 
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
         // Check if connection is broken
-        conn.request_count.load(Ordering::Relaxed) > 10000 ||
-        conn.created_at.elapsed() > Duration::from_secs(600)
+        conn.request_count.load(Ordering::Relaxed) > 10000
+            || conn.created_at.elapsed() > Duration::from_secs(600)
     }
 }
 
@@ -225,7 +198,8 @@ impl HttpConnection {
     pub async fn send(&self, request: McpRequest) -> Result<McpResponse, HttpError> {
         self.request_count.fetch_add(1, Ordering::Relaxed);
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/mcp", self.base_url))
             .json(&request)
             .send()
@@ -237,8 +211,8 @@ impl HttpConnection {
             return Err(HttpError::ServerError(format!("{}: {}", status, body)));
         }
 
-        let mcp_response: McpResponse = response.json().await
-            .map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
+        let mcp_response: McpResponse =
+            response.json().await.map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
 
         Ok(mcp_response)
     }
@@ -300,8 +274,7 @@ impl HttpTransport {
         let start = Instant::now();
 
         // Get connection from pool
-        let conn = self.pool.get().await
-            .map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
+        let conn = self.pool.get().await.map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
 
         // Send request
         let response = self.retry_with_backoff(|| conn.send(request.clone())).await?;
@@ -330,7 +303,7 @@ impl HttpTransport {
                     tokio::time::sleep(delay).await;
                     delay *= 2;
                     attempts += 1;
-                }
+                },
             }
         }
     }
@@ -347,10 +320,10 @@ impl HttpTransport {
 
     /// Health check
     pub async fn health_check(&self) -> Result<(), HttpError> {
-        let conn = self.pool.get().await
-            .map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
+        let conn = self.pool.get().await.map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
 
-        let response = conn.client
+        let response = conn
+            .client
             .get(&format!("{}/health", conn.base_url))
             .timeout(Duration::from_secs(5))
             .send()

@@ -125,13 +125,8 @@ impl PkceCodeVerifier {
     /// Generate random verifier
     pub fn new_random() -> Self {
         use rand::Rng;
-        let random_bytes: Vec<u8> = (0..32)
-            .map(|_| rand::thread_rng().gen::<u8>())
-            .collect();
-        let verifier = base64::encode_config(
-            random_bytes,
-            base64::URL_SAFE_NO_PAD
-        );
+        let random_bytes: Vec<u8> = (0..32).map(|_| rand::thread_rng().gen::<u8>()).collect();
+        let verifier = base64::encode_config(random_bytes, base64::URL_SAFE_NO_PAD);
         Self(verifier)
     }
 
@@ -147,14 +142,11 @@ pub struct PkceCodeChallenge(String);
 impl PkceCodeChallenge {
     /// Create challenge from verifier using S256
     pub fn from_code_verifier(verifier: &PkceCodeVerifier) -> Self {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(verifier.as_str());
         let result = hasher.finalize();
-        let challenge = base64::encode_config(
-            result,
-            base64::URL_SAFE_NO_PAD
-        );
+        let challenge = base64::encode_config(result, base64::URL_SAFE_NO_PAD);
         Self(challenge)
     }
 
@@ -272,10 +264,7 @@ impl OAuth2Authenticator {
                 provider_config.issuer
             );
 
-            let discovery: OpenIdConfiguration = reqwest::get(&discovery_url)
-                .await?
-                .json()
-                .await?;
+            let discovery: OpenIdConfiguration = reqwest::get(&discovery_url).await?.json().await?;
 
             let provider = OAuthProvider {
                 issuer: provider_config.issuer.clone(),
@@ -302,7 +291,9 @@ impl OAuth2Authenticator {
 
     /// Generate authorization URL with PKCE
     pub async fn authorize_url(&self, provider_id: &str) -> Result<AuthorizeUrl, OAuthError> {
-        let provider = self.providers.get(provider_id)
+        let provider = self
+            .providers
+            .get(provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(provider_id.to_string()))?;
 
         // Generate PKCE challenge
@@ -351,15 +342,15 @@ impl OAuth2Authenticator {
     /// Exchange authorization code for tokens
     pub async fn exchange_code(&self, code: &str, state: &str) -> Result<TokenPair, OAuthError> {
         // Retrieve and validate pending auth
-        let pending = self.auth_codes.remove(state)
-            .ok_or(OAuthError::InvalidState)?
-            .1;
+        let pending = self.auth_codes.remove(state).ok_or(OAuthError::InvalidState)?.1;
 
         if pending.expires_at < Utc::now() {
             return Err(OAuthError::ExpiredCode);
         }
 
-        let provider = self.providers.get(&pending.provider_id)
+        let provider = self
+            .providers
+            .get(&pending.provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(pending.provider_id.clone()))?;
 
         // Build token request
@@ -401,11 +392,16 @@ impl OAuth2Authenticator {
     }
 
     /// Decode ID token without validation (for demo purposes)
-    fn decode_id_token(&self, token: &str) -> Result<HashMap<String, serde_json::Value>, OAuthError> {
+    fn decode_id_token(
+        &self,
+        token: &str,
+    ) -> Result<HashMap<String, serde_json::Value>, OAuthError> {
         // Split the token
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() != 3 {
-            return Err(OAuthError::ValidationError("Invalid token format".to_string()));
+            return Err(OAuthError::ValidationError(
+                "Invalid token format".to_string(),
+            ));
         }
 
         // Decode the payload
@@ -429,7 +425,9 @@ impl OAuth2Authenticator {
             return Ok(cached.clone());
         }
 
-        let provider = self.providers.get(provider_id)
+        let provider = self
+            .providers
+            .get(provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(provider_id.to_string()))?;
 
         // In production, call the introspection endpoint
@@ -457,7 +455,9 @@ impl OAuth2Authenticator {
         provider_id: &str,
         refresh_token: &str,
     ) -> Result<TokenPair, OAuthError> {
-        let provider = self.providers.get(provider_id)
+        let provider = self
+            .providers
+            .get(provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(provider_id.to_string()))?;
 
         let token_response: TokenResponse = reqwest::Client::new()
@@ -488,12 +488,10 @@ impl OAuth2Authenticator {
     }
 
     /// Revoke token
-    pub async fn revoke_token(
-        &self,
-        provider_id: &str,
-        token: &str,
-    ) -> Result<(), OAuthError> {
-        let provider = self.providers.get(provider_id)
+    pub async fn revoke_token(&self, provider_id: &str, token: &str) -> Result<(), OAuthError> {
+        let provider = self
+            .providers
+            .get(provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(provider_id.to_string()))?;
 
         // In production, call the revocation endpoint if available
@@ -508,13 +506,8 @@ impl OAuth2Authenticator {
 /// Generate secure random string
 fn generate_secure_random(length: usize) -> String {
     use rand::Rng;
-    let random_bytes: Vec<u8> = (0..length)
-        .map(|_| rand::thread_rng().gen::<u8>())
-        .collect();
-    base64::encode_config(
-        random_bytes,
-        base64::URL_SAFE_NO_PAD
-    )
+    let random_bytes: Vec<u8> = (0..length).map(|_| rand::thread_rng().gen::<u8>()).collect();
+    base64::encode_config(random_bytes, base64::URL_SAFE_NO_PAD)
 }
 
 #[cfg(test)]

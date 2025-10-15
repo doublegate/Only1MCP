@@ -4,18 +4,18 @@
 //! and security sandboxing for untrusted MCP servers.
 
 use crate::error::{Error, Result};
-use crate::types::{ServerId, McpRequest, McpResponse};
-use std::process::Stdio;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
-use std::collections::HashMap;
-use tokio::process::{Child, ChildStdin, ChildStdout, ChildStderr, Command};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
+use crate::types::{McpRequest, McpResponse, ServerId};
 use dashmap::DashMap;
-use tracing::{info, error, debug, warn};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
+use tokio::sync::Mutex;
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransportError {
@@ -105,22 +105,17 @@ impl StdioTransport {
         request: McpRequest,
     ) -> Result<McpResponse, TransportError> {
         // Get or create STDIO process
-        let process = self.get_or_create_process(
-            server_id.clone(),
-            config
-        ).await?;
+        let process = self.get_or_create_process(server_id.clone(), config).await?;
 
         // Send request through stdin
         let request_bytes = serde_json::to_vec(&request)?;
         process.send(request_bytes).await?;
 
         // Read response from stdout with timeout
-        let response_bytes = tokio::time::timeout(
-            Duration::from_millis(config.timeout_ms),
-            process.receive()
-        ).await
-            .map_err(|_| TransportError::Timeout)?
-            ?;
+        let response_bytes =
+            tokio::time::timeout(Duration::from_millis(config.timeout_ms), process.receive())
+                .await
+                .map_err(|_| TransportError::Timeout)??;
 
         // Parse response
         let response: McpResponse = serde_json::from_slice(&response_bytes)?;
@@ -172,7 +167,7 @@ impl StdioTransport {
             // Run as non-root user if we're root
             unsafe {
                 if libc::getuid() == 0 {
-                    command.uid(1000);  // Run as user 1000
+                    command.uid(1000); // Run as user 1000
                     command.gid(1000);
                 }
             }
@@ -216,28 +211,22 @@ impl StdioTransport {
             });
         }
 
-        let mut child = command.spawn()
-            .map_err(|e| TransportError::ProcessSpawnFailed(e))?;
+        let mut child = command.spawn().map_err(|e| TransportError::ProcessSpawnFailed(e))?;
 
-        let stdin = child.stdin.take()
-            .ok_or(TransportError::NoStdin)?;
-        let stdout = child.stdout.take()
-            .ok_or(TransportError::NoStdout)?;
-        let stderr = child.stderr.take()
-            .ok_or(TransportError::NoStderr)?;
+        let stdin = child.stdin.take().ok_or(TransportError::NoStdin)?;
+        let stdout = child.stdout.take().ok_or(TransportError::NoStdout)?;
+        let stderr = child.stderr.take().ok_or(TransportError::NoStderr)?;
 
-        let process = Arc::new(StdioProcess::new(
-            child,
-            stdin,
-            stdout,
-            stderr,
-        ));
+        let process = Arc::new(StdioProcess::new(child, stdin, stdout, stderr));
 
         // Store in process map
         self.processes.insert(server_id.clone(), process.clone());
         self.metrics.processes_spawned.fetch_add(1, Ordering::Relaxed);
 
-        info!("Spawned STDIO process for server {}: {}", server_id, config.command);
+        info!(
+            "Spawned STDIO process for server {}: {}",
+            server_id, config.command
+        );
         Ok(process)
     }
 
@@ -252,9 +241,7 @@ impl StdioTransport {
 
     /// Kill all processes.
     pub async fn kill_all(&self) -> Result<(), Error> {
-        let processes: Vec<_> = self.processes.iter()
-            .map(|entry| entry.value().clone())
-            .collect();
+        let processes: Vec<_> = self.processes.iter().map(|entry| entry.value().clone()).collect();
 
         for process in processes {
             process.kill().await?;
@@ -282,12 +269,7 @@ pub struct StdioProcess {
 
 impl StdioProcess {
     /// Create a new STDIO process wrapper.
-    fn new(
-        child: Child,
-        stdin: ChildStdin,
-        stdout: ChildStdout,
-        stderr: ChildStderr,
-    ) -> Self {
+    fn new(child: Child, stdin: ChildStdin, stdout: ChildStdout, stderr: ChildStderr) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
             stdin: Arc::new(Mutex::new(stdin)),
@@ -323,7 +305,7 @@ impl StdioProcess {
             error!("Received message too large: {} bytes", len);
             return Err(TransportError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "Message too large"
+                "Message too large",
             )));
         }
 
@@ -341,13 +323,9 @@ impl StdioProcess {
         let mut buffer = Vec::new();
 
         // Try to read available data (non-blocking)
-        match tokio::time::timeout(
-            Duration::from_millis(10),
-            stderr.read_to_end(&mut buffer)
-        ).await {
-            Ok(Ok(_)) if !buffer.is_empty() => {
-                Some(String::from_utf8_lossy(&buffer).to_string())
-            }
+        match tokio::time::timeout(Duration::from_millis(10), stderr.read_to_end(&mut buffer)).await
+        {
+            Ok(Ok(_)) if !buffer.is_empty() => Some(String::from_utf8_lossy(&buffer).to_string()),
             _ => None,
         }
     }
@@ -371,7 +349,7 @@ impl StdioProcess {
             Err(e) => {
                 error!("Failed to check process status: {}", e);
                 false
-            }
+            },
         }
     }
 
@@ -395,10 +373,9 @@ impl StdioProcess {
         if let Ok(data) = serde_json::to_vec(&ping_request) {
             if self.send(data).await.is_ok() {
                 // Try to receive response with short timeout
-                if let Ok(Ok(_)) = tokio::time::timeout(
-                    Duration::from_secs(1),
-                    self.receive()
-                ).await {
+                if let Ok(Ok(_)) =
+                    tokio::time::timeout(Duration::from_secs(1), self.receive()).await
+                {
                     return true;
                 }
             }

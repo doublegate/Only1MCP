@@ -1,18 +1,13 @@
 //! Comprehensive metrics following Prometheus naming conventions
 
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_histogram_vec, register_gauge_vec,
-    CounterVec, HistogramVec, GaugeVec, opts, histogram_opts,
-    Encoder, TextEncoder, Registry,
-};
-use std::time::Duration;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
+    histogram_opts, opts, register_counter_vec, register_gauge_vec, register_histogram_vec,
+    CounterVec, Encoder, GaugeVec, HistogramVec, Registry, TextEncoder,
 };
 use std::sync::Arc;
+use std::time::Duration;
 
 lazy_static! {
     // Request metrics
@@ -168,15 +163,8 @@ lazy_static! {
 }
 
 /// Record metrics for an MCP request
-pub fn record_mcp_request(
-    server_id: &str,
-    method: &str,
-    status: &str,
-    duration: Duration,
-) {
-    MCP_REQUESTS_TOTAL
-        .with_label_values(&[server_id, method, status])
-        .inc();
+pub fn record_mcp_request(server_id: &str, method: &str, status: &str, duration: Duration) {
+    MCP_REQUESTS_TOTAL.with_label_values(&[server_id, method, status]).inc();
 
     MCP_REQUEST_DURATION_SECONDS
         .with_label_values(&[server_id, method])
@@ -184,10 +172,7 @@ pub fn record_mcp_request(
 }
 
 /// Record context optimization metrics
-pub fn record_context_optimization(
-    optimization_type: &str,
-    tokens_saved: u64,
-) {
+pub fn record_context_optimization(optimization_type: &str, tokens_saved: u64) {
     CONTEXT_TOKENS_SAVED
         .with_label_values(&[optimization_type])
         .inc_by(tokens_saved as f64);
@@ -195,9 +180,7 @@ pub fn record_context_optimization(
 
 /// Update cache hit ratio
 pub fn update_cache_hit_ratio(cache_type: &str, ratio: f64) {
-    CONTEXT_CACHE_HIT_RATIO
-        .with_label_values(&[cache_type])
-        .set(ratio);
+    CONTEXT_CACHE_HIT_RATIO.with_label_values(&[cache_type]).set(ratio);
 }
 
 /// Update backend health status
@@ -219,9 +202,7 @@ pub fn update_connection_pool(server_id: &str, active: usize, idle: usize, pendi
     CONNECTION_POOL_SIZE
         .with_label_values(&[server_id, "active"])
         .set(active as f64);
-    CONNECTION_POOL_SIZE
-        .with_label_values(&[server_id, "idle"])
-        .set(idle as f64);
+    CONNECTION_POOL_SIZE.with_label_values(&[server_id, "idle"]).set(idle as f64);
     CONNECTION_POOL_SIZE
         .with_label_values(&[server_id, "pending"])
         .set(pending as f64);
@@ -229,9 +210,7 @@ pub fn update_connection_pool(server_id: &str, active: usize, idle: usize, pendi
 
 /// Record API cost
 pub fn record_api_cost(provider: &str, model: &str, operation: &str, cost: f64) {
-    API_COST_DOLLARS
-        .with_label_values(&[provider, model, operation])
-        .inc_by(cost);
+    API_COST_DOLLARS.with_label_values(&[provider, model, operation]).inc_by(cost);
 }
 
 /// Update circuit breaker state
@@ -241,23 +220,17 @@ pub fn update_circuit_breaker_state(server_id: &str, state: CircuitBreakerState)
         CircuitBreakerState::Open => 1.0,
         CircuitBreakerState::HalfOpen => 2.0,
     };
-    CIRCUIT_BREAKER_STATE
-        .with_label_values(&[server_id])
-        .set(state_value);
+    CIRCUIT_BREAKER_STATE.with_label_values(&[server_id]).set(state_value);
 }
 
 /// Record circuit breaker failure
 pub fn record_circuit_breaker_failure(server_id: &str) {
-    CIRCUIT_BREAKER_FAILURES
-        .with_label_values(&[server_id])
-        .inc();
+    CIRCUIT_BREAKER_FAILURES.with_label_values(&[server_id]).inc();
 }
 
 /// Record rate limit exceeded
 pub fn record_rate_limit_exceeded(client_id: &str, limit_type: &str) {
-    RATE_LIMIT_EXCEEDED
-        .with_label_values(&[client_id, limit_type])
-        .inc();
+    RATE_LIMIT_EXCEEDED.with_label_values(&[client_id, limit_type]).inc();
 }
 
 /// Update remaining rate limit
@@ -308,17 +281,13 @@ pub enum PrometheusError {
 }
 
 /// HTTP handler for /metrics endpoint
-pub async fn metrics_handler(
-    State(exporter): State<Arc<MetricsExporter>>,
-) -> impl IntoResponse {
+pub async fn metrics_handler(State(exporter): State<Arc<MetricsExporter>>) -> impl IntoResponse {
     match exporter.export() {
-        Ok(metrics) => {
-            (
-                StatusCode::OK,
-                [("Content-Type", "text/plain; version=0.0.4")],
-                metrics,
-            )
-        }
+        Ok(metrics) => (
+            StatusCode::OK,
+            [("Content-Type", "text/plain; version=0.0.4")],
+            metrics,
+        ),
         Err(e) => {
             tracing::error!("Failed to export metrics: {}", e);
             (
@@ -326,7 +295,7 @@ pub async fn metrics_handler(
                 [("Content-Type", "text/plain")],
                 b"Failed to export metrics".to_vec(),
             )
-        }
+        },
     }
 }
 
@@ -357,9 +326,7 @@ impl SystemMetricsCollector {
 
         // CPU metrics
         if let Ok(cpu_usage) = sys_info::loadavg() {
-            CPU_USAGE_PERCENT
-                .with_label_values(&["all"])
-                .set(cpu_usage.one * 100.0);
+            CPU_USAGE_PERCENT.with_label_values(&["all"]).set(cpu_usage.one * 100.0);
         }
     }
 }
@@ -379,13 +346,93 @@ pub fn init(metrics_port: u16) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Convenient metrics wrapper for application state
+#[derive(Clone)]
+pub struct Metrics {
+    exporter: Arc<MetricsExporter>,
+}
+
+impl Metrics {
+    /// Create new metrics instance
+    pub fn new() -> Self {
+        Self {
+            exporter: Arc::new(MetricsExporter::new()),
+        }
+    }
+
+    /// Record MCP request
+    pub fn record_request(&self, server_id: &str, method: &str, status: &str, duration: Duration) {
+        record_mcp_request(server_id, method, status, duration);
+    }
+
+    /// Increment cache hits
+    pub fn cache_hits(&self) -> CacheHitCounter {
+        CacheHitCounter
+    }
+
+    /// Record for specific tools/list duration
+    pub fn tools_list_duration(&self) -> DurationRecorder {
+        DurationRecorder {
+            metric_name: "tools_list",
+        }
+    }
+
+    /// Record for tools/call duration
+    pub fn tools_call_duration(&self) -> DurationRecorder {
+        DurationRecorder {
+            metric_name: "tools_call",
+        }
+    }
+
+    /// Record for resources/list duration
+    pub fn resources_list_duration(&self) -> DurationRecorder {
+        DurationRecorder {
+            metric_name: "resources_list",
+        }
+    }
+}
+
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Helper struct for cache hit counting
+pub struct CacheHitCounter;
+
+impl CacheHitCounter {
+    pub fn inc(&self) {
+        CONTEXT_TOKENS_SAVED.with_label_values(&["cache_hit"]).inc();
+    }
+}
+
+/// Helper struct for duration recording
+pub struct DurationRecorder {
+    metric_name: &'static str,
+}
+
+impl DurationRecorder {
+    pub fn record(&self, duration: f64) {
+        // Record to appropriate histogram
+        MCP_REQUEST_DURATION_SECONDS
+            .with_label_values(&["proxy", self.metric_name])
+            .observe(duration);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_record_mcp_request() {
-        record_mcp_request("server1", "tools.list", "success", Duration::from_millis(50));
+        record_mcp_request(
+            "server1",
+            "tools.list",
+            "success",
+            Duration::from_millis(50),
+        );
 
         // Verify metric was recorded
         let metric_families = REGISTRY.gather();

@@ -6,10 +6,10 @@
 use crate::{config::Config, error::Result};
 use std::sync::Arc;
 
-pub mod server;
-pub mod router;
-pub mod registry;
 pub mod handler;
+pub mod registry;
+pub mod router;
+pub mod server;
 
 pub use server::ProxyServer;
 
