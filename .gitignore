@@ -46,6 +46,9 @@ only1mcp.toml
 *.tmp
 *.temp
 
+# Session memory (local only)
+CLAUDE.local.md
+
 # OS
 Thumbs.db
 .DS_Store
