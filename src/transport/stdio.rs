@@ -103,7 +103,7 @@ impl StdioTransport {
         server_id: ServerId,
         config: &StdioConfig,
         request: McpRequest,
-    ) -> Result<McpResponse, TransportError> {
+    ) -> std::result::Result<McpResponse, TransportError> {
         // Get or create STDIO process
         let process = self.get_or_create_process(server_id.clone(), config).await?;
 
@@ -129,7 +129,7 @@ impl StdioTransport {
         &self,
         server_id: ServerId,
         config: &StdioConfig,
-    ) -> Result<Arc<StdioProcess>, TransportError> {
+    ) -> std::result::Result<Arc<StdioProcess>, TransportError> {
         // Check if process exists and is healthy
         if let Some(process) = self.processes.get(&server_id) {
             if process.is_healthy().await {
@@ -231,7 +231,7 @@ impl StdioTransport {
     }
 
     /// Kill a specific process.
-    pub async fn kill_process(&self, server_id: &ServerId) -> Result<(), Error> {
+    pub async fn kill_process(&self, server_id: &ServerId) -> Result<()> {
         if let Some((_, process)) = self.processes.remove(server_id) {
             process.kill().await?;
             info!("Killed process for server {}", server_id);
@@ -240,7 +240,7 @@ impl StdioTransport {
     }
 
     /// Kill all processes.
-    pub async fn kill_all(&self) -> Result<(), Error> {
+    pub async fn kill_all(&self) -> Result<()> {
         let processes: Vec<_> = self.processes.iter().map(|entry| entry.value().clone()).collect();
 
         for process in processes {
@@ -280,7 +280,7 @@ impl StdioProcess {
     }
 
     /// Send a message to the STDIO server.
-    pub async fn send(&self, data: Vec<u8>) -> Result<(), TransportError> {
+    pub async fn send(&self, data: Vec<u8>) -> std::result::Result<(), TransportError> {
         let mut stdin = self.stdin.lock().await;
 
         // Write length-prefixed message (4 bytes length + data)
@@ -294,7 +294,7 @@ impl StdioProcess {
     }
 
     /// Receive a message from the STDIO server.
-    pub async fn receive(&self) -> Result<Vec<u8>, TransportError> {
+    pub async fn receive(&self) -> std::result::Result<Vec<u8>, TransportError> {
         let mut stdout = self.stdout.lock().await;
 
         // Read length prefix
@@ -354,7 +354,7 @@ impl StdioProcess {
     }
 
     /// Kill the process.
-    pub async fn kill(&self) -> Result<(), Error> {
+    pub async fn kill(&self) -> Result<()> {
         let mut child = self.child.lock().await;
         child.kill().await?;
         self.healthy.store(false, Ordering::Relaxed);

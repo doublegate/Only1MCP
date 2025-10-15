@@ -171,10 +171,10 @@ pub struct HotReloadManager {
 #[async_trait::async_trait]
 pub trait ConfigLoader: Send + Sync {
     /// Load configuration from path
-    async fn load(&self, path: &Path) -> Result<crate::config::Config, ProxyError>;
+    async fn load(&self, path: &Path) -> std::result::Result<crate::config::Config, ProxyError>;
 
     /// Validate configuration
-    async fn validate(&self, config: &crate::config::Config) -> Result<(), ProxyError>;
+    async fn validate(&self, config: &crate::config::Config) -> std::result::Result<(), ProxyError>;
 }
 
 /// Reload callback type
@@ -201,7 +201,7 @@ impl HotReloadManager {
     }
 
     /// Reload configuration from file
-    pub async fn reload_configuration(&self, path: &Path) -> Result<u64, ProxyError> {
+    pub async fn reload_configuration(&self, path: &Path) -> std::result::Result<u64, ProxyError> {
         // Load new configuration
         let new_config = self.config_loader.load(path).await?;
 

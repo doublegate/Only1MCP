@@ -92,7 +92,7 @@ impl RequestRouter {
         request: &McpRequest,
         registry: &ServerRegistry,
         cache: &ResponseCache,
-    ) -> Result<(ServerId, Duration), RoutingError> {
+    ) -> std::result::Result<(ServerId, Duration), RoutingError> {
         let method = request.method();
         let tool_name = extract_tool_name(request)?;
 
@@ -170,7 +170,7 @@ impl RequestRouter {
         &self,
         key: &str,
         servers: &[ServerId],
-    ) -> Result<ServerId, RoutingError> {
+    ) -> std::result::Result<ServerId, RoutingError> {
         let hash_ring = self.hash_ring.load();
 
         // Hash the routing key
@@ -190,7 +190,7 @@ impl RequestRouter {
     ///
     /// Randomly selects two servers and routes to the one with fewer
     /// active connections. O(1) complexity with near-optimal distribution.
-    fn route_least_connections(&self, servers: &[ServerId]) -> Result<ServerId, RoutingError> {
+    fn route_least_connections(&self, servers: &[ServerId]) -> std::result::Result<ServerId, RoutingError> {
         use rand::seq::SliceRandom;
 
         if servers.len() == 1 {
@@ -217,7 +217,7 @@ impl RequestRouter {
     }
 
     /// Simple round-robin routing for fairness.
-    fn route_round_robin(&self, servers: &[ServerId]) -> Result<ServerId, RoutingError> {
+    fn route_round_robin(&self, servers: &[ServerId]) -> std::result::Result<ServerId, RoutingError> {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
         let index = COUNTER.fetch_add(1, Ordering::Relaxed) % servers.len();
@@ -228,7 +228,7 @@ impl RequestRouter {
     }
 
     /// Random server selection for simplicity.
-    fn route_random(&self, servers: &[ServerId]) -> Result<ServerId, RoutingError> {
+    fn route_random(&self, servers: &[ServerId]) -> std::result::Result<ServerId, RoutingError> {
         use rand::seq::SliceRandom;
 
         let mut rng = rand::thread_rng();
@@ -243,7 +243,7 @@ impl RequestRouter {
         &self,
         servers: &[ServerId],
         registry: &ServerRegistry,
-    ) -> Result<ServerId, RoutingError> {
+    ) -> std::result::Result<ServerId, RoutingError> {
         use rand::distributions::{Distribution, WeightedIndex};
 
         // Get weights for each server
@@ -381,7 +381,7 @@ impl ConsistentHashRing {
 // Helper functions
 
 /// Extract tool name from MCP request.
-fn extract_tool_name(request: &McpRequest) -> Result<String, RoutingError> {
+fn extract_tool_name(request: &McpRequest) -> std::result::Result<String, RoutingError> {
     request
         .get_tool_name()
         .ok_or_else(|| RoutingError::NoBackendAvailable("unknown".to_string()))
@@ -404,7 +404,7 @@ pub struct ServerRegistry {
 
 impl ServerRegistry {
     /// Find servers that support a specific tool.
-    pub async fn find_servers_for_tool(&self, tool: &str) -> Result<Vec<ServerId>, Error> {
+    pub async fn find_servers_for_tool(&self, tool: &str) -> std::result::Result<Vec<ServerId>, Error> {
         let servers: Vec<ServerId> = self
             .servers
             .iter()

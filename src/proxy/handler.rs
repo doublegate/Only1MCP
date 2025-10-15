@@ -23,7 +23,7 @@ use tracing::{debug, error, info, instrument, warn};
 pub async fn handle_jsonrpc_request(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     // Parse request
     let request: McpRequest =
         serde_json::from_value(payload).map_err(|e| ProxyError::InvalidRequest(e.to_string()))?;
@@ -48,7 +48,7 @@ pub async fn handle_jsonrpc_request(
 }
 
 /// Handle tools/list request with aggregation.
-async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
+async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Check cache
@@ -125,12 +125,12 @@ async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> Result<
 pub async fn handle_tools_call(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_tools_call_impl(state, request).await.map(Json)
 }
 
-async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
+async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Extract tool name
@@ -170,7 +170,7 @@ async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> Result<
 pub async fn handle_resources_list(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_resources_list_impl(state, request).await.map(Json)
 }
@@ -178,7 +178,7 @@ pub async fn handle_resources_list(
 async fn handle_resources_list_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     // Similar to tools/list but for resources
     let start = Instant::now();
 
@@ -220,7 +220,7 @@ async fn handle_resources_list_impl(
 pub async fn handle_resources_read(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_resources_read_impl(state, request).await.map(Json)
 }
@@ -228,7 +228,7 @@ pub async fn handle_resources_read(
 async fn handle_resources_read_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     let uri = request
         .params()
         .get("uri")
@@ -255,7 +255,7 @@ async fn handle_resources_read_impl(
 pub async fn handle_resources_subscribe(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_resources_subscribe_impl(state, request).await.map(Json)
 }
@@ -263,7 +263,7 @@ pub async fn handle_resources_subscribe(
 async fn handle_resources_subscribe_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     // For subscriptions, we need to establish a persistent connection
     // This would typically upgrade to WebSocket or SSE
     let uri = request
@@ -291,7 +291,7 @@ async fn handle_resources_subscribe_impl(
 pub async fn handle_prompts_list(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_prompts_list_impl(state, request).await.map(Json)
 }
@@ -299,7 +299,7 @@ pub async fn handle_prompts_list(
 async fn handle_prompts_list_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     // Similar aggregation pattern as tools/list
     let cache_key = format!("prompts:list:{}", state.config.server.port);
     if let Some(cached) = state.cache.get(&cache_key).await {
@@ -333,7 +333,7 @@ async fn handle_prompts_list_impl(
 pub async fn handle_prompts_get(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_prompts_get_impl(state, request).await.map(Json)
 }
@@ -341,7 +341,7 @@ pub async fn handle_prompts_get(
 async fn handle_prompts_get_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     let name = request
         .params()
         .get("name")
@@ -368,7 +368,7 @@ async fn handle_prompts_get_impl(
 pub async fn handle_sampling_create(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
-) -> Result<Json<Value>, ProxyError> {
+) -> std::result::Result<Json<Value>, ProxyError> {
     let request: McpRequest = serde_json::from_value(payload)?;
     handle_sampling_create_impl(state, request).await.map(Json)
 }
@@ -376,7 +376,7 @@ pub async fn handle_sampling_create(
 async fn handle_sampling_create_impl(
     state: AppState,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     // Route to a capable server
     let router = RequestRouter::new(state.config.proxy.routing.clone());
     let (server_id, _) = router
@@ -405,13 +405,13 @@ async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState)
 }
 
 /// Handle Server-Sent Events stream.
-pub async fn handle_sse_stream(State(state): State<AppState>) -> Result<Response, ProxyError> {
+pub async fn handle_sse_stream(State(state): State<AppState>) -> std::result::Result<Response, ProxyError> {
     // TODO: Implement SSE for server push
     Ok(Response::new("SSE endpoint".into()))
 }
 
 /// Route generic/unknown requests to appropriate backend.
-async fn route_generic_request(state: AppState, request: McpRequest) -> Result<Value, ProxyError> {
+async fn route_generic_request(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
     let router = RequestRouter::new(state.config.proxy.routing.clone());
     let (server_id, _) = router
         .route_request(&request, &*state.registry.read().await, &state.cache)
@@ -431,7 +431,7 @@ async fn fetch_tools_from_server(
     state: AppState,
     server_id: String,
     request: McpRequest,
-) -> Result<Vec<Tool>, Error> {
+) -> Result<Vec<Tool>> {
     // TODO: Implement actual fetching logic
     Ok(Vec::new())
 }
@@ -440,7 +440,7 @@ async fn fetch_resources_from_server(
     state: &AppState,
     server_id: String,
     request: McpRequest,
-) -> Result<Vec<Resource>, Error> {
+) -> Result<Vec<Resource>> {
     // TODO: Implement actual fetching logic
     Ok(Vec::new())
 }
@@ -449,7 +449,7 @@ async fn fetch_prompts_from_server(
     state: &AppState,
     server_id: String,
     request: McpRequest,
-) -> Result<Vec<Prompt>, Error> {
+) -> Result<Vec<Prompt>> {
     // TODO: Implement actual fetching logic
     Ok(Vec::new())
 }
@@ -458,7 +458,7 @@ async fn send_request_to_backend(
     state: AppState,
     server: ServerConfig,
     request: McpRequest,
-) -> Result<Value, ProxyError> {
+) -> std::result::Result<Value, ProxyError> {
     // TODO: Implement actual backend communication
     Ok(json!({
         "jsonrpc": "2.0",
@@ -467,10 +467,10 @@ async fn send_request_to_backend(
     }))
 }
 
-async fn execute_with_retry<F, Fut>(f: F, max_retries: u32) -> Result<Value, ProxyError>
+async fn execute_with_retry<F, Fut>(f: F, max_retries: u32) -> std::result::Result<Value, ProxyError>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = Result<Value, ProxyError>>,
+    Fut: std::future::Future<Output = std::result::Result<Value, ProxyError>>,
 {
     let mut attempts = 0;
     loop {
