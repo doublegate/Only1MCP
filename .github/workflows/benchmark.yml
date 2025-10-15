@@ -1,24 +1,27 @@
 name: Benchmark
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'benches/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'src/**'
-      - 'benches/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
+  # Disabled automatic triggers - uncomment when project is ready
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'src/**'
+  #     - 'benches/**'
+  #     - 'Cargo.toml'
+  #     - 'Cargo.lock'
+  # pull_request:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'src/**'
+  #     - 'benches/**'
+  #     - 'Cargo.toml'
+  #     - 'Cargo.lock'
+  # schedule:
+  #   # Run benchmarks daily at 2 AM UTC
+  #   - cron: '0 2 * * *'
+
+  # Manual trigger only for now
   workflow_dispatch:
-  schedule:
-    # Run benchmarks daily at 2 AM UTC
-    - cron: '0 2 * * *'
 
 env:
   CARGO_TERM_COLOR: always

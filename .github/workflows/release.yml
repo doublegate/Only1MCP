@@ -1,9 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Disabled automatic triggers - uncomment when project is ready
+  # push:
+  #   tags:
+  #     - 'v*'
+
+  # Manual trigger only for now
   workflow_dispatch:
     inputs:
       version:

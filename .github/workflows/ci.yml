@@ -1,10 +1,14 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+  # Disabled automatic triggers - uncomment when project is ready
+  # push:
+  #   branches: [main, develop]
+  # pull_request:
+  #   branches: [main]
+
+  # Manual trigger only for now
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
