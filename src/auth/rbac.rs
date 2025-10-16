@@ -3,7 +3,7 @@
 //! and policy-based access control (PBAC).
 
 use async_trait::async_trait;
-use chrono::{DateTime, Local, Timelike, Utc, Weekday};
+use chrono::{DateTime, Datelike, Local, Utc, Weekday};
 use ipnetwork::IpNetwork;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -133,21 +133,13 @@ pub struct TimeRestriction {
 
 /// Resource quotas for rate limiting
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ResourceQuotas {
     pub max_requests_per_hour: Option<u32>,
     pub max_tokens_per_day: Option<u64>,
     pub max_cost_per_month: Option<f64>,
 }
 
-impl Default for ResourceQuotas {
-    fn default() -> Self {
-        Self {
-            max_requests_per_hour: None,
-            max_tokens_per_day: None,
-            max_cost_per_month: None,
-        }
-    }
-}
 
 /// Authorization context for policy evaluation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -327,15 +319,15 @@ impl AuthorizationEngine {
         // Check wildcard permissions
         if !authorized {
             match permission {
-                Permission::ToolExecute(tool) => {
+                Permission::ToolExecute(_tool) => {
                     authorized =
                         effective_permissions.contains(&Permission::ToolExecute("*".to_string()));
                 },
-                Permission::ToolRead(tool) => {
+                Permission::ToolRead(_tool) => {
                     authorized =
                         effective_permissions.contains(&Permission::ToolRead("*".to_string()));
                 },
-                Permission::ToolModify(tool) => {
+                Permission::ToolModify(_tool) => {
                     authorized =
                         effective_permissions.contains(&Permission::ToolModify("*".to_string()));
                 },
@@ -432,6 +424,12 @@ pub struct PolicyEngine {
     last_reason: Arc<RwLock<String>>,
 }
 
+impl Default for PolicyEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PolicyEngine {
     /// Create new policy engine
     pub fn new() -> Self {
@@ -492,6 +490,12 @@ pub struct TimeBasedPolicy {
     restrictions: HashMap<String, TimeRestriction>,
 }
 
+impl Default for TimeBasedPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TimeBasedPolicy {
     pub fn new() -> Self {
         Self {
@@ -536,6 +540,12 @@ impl Policy for TimeBasedPolicy {
 /// IP allowlist policy
 pub struct IpAllowlistPolicy;
 
+impl Default for IpAllowlistPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IpAllowlistPolicy {
     pub fn new() -> Self {
         Self
@@ -563,6 +573,12 @@ impl Policy for IpAllowlistPolicy {
 
 /// MFA requirement policy
 pub struct MfaPolicy;
+
+impl Default for MfaPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MfaPolicy {
     pub fn new() -> Self {

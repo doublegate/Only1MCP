@@ -51,8 +51,8 @@ pub struct CachedResponse {
     /// The actual cached response data
     pub data: Vec<u8>,
 
-    /// When this entry was created
-    #[serde(skip)]
+    /// When this entry was created (skipped for serialization, initialized on deserialization)
+    #[serde(skip, default = "Instant::now")]
     pub created_at: Instant,
 
     /// How many times this entry has been accessed
@@ -142,7 +142,7 @@ impl LayeredCache {
         let response = compute().await?;
 
         // Store in cache if cacheable
-        if self.is_cacheable(&request, &response) {
+        if self.is_cacheable(request, &response) {
             let serialized = self.serialize_response(&response)?;
             let entry = CachedResponse {
                 data: serialized.clone(),

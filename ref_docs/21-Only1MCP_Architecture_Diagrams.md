@@ -1,30 +1,56 @@
 # Only1MCP Architecture Diagrams
+
 ## Comprehensive Technical Visualization for Initial Development
 
-**Document Version:** 1.0  
-**Date:** October 14, 2025  
-**Status:** Technical Architecture Visualization  
+**Document Version:** 1.0
+**Date:** October 14, 2025
+**Status:** Technical Architecture Visualization
 **Purpose:** Detailed Mermaid diagrams for system architecture, data flows, security, and implementation patterns
 
 ---
 
 ## Table of Contents
 
-1. [Overall System Architecture](#1-overall-system-architecture)
-2. [Core Component Architecture](#2-core-component-architecture)
-3. [Request Routing and Transport Layer](#3-request-routing-and-transport-layer)
-4. [Security Architecture](#4-security-architecture)
-5. [Authentication and Authorization Flow](#5-authentication-and-authorization-flow)
-6. [Context Optimization Pipeline](#6-context-optimization-pipeline)
-7. [Caching Strategy Architecture](#7-caching-strategy-architecture)
-8. [Hot-Reload and Zero-Downtime Pattern](#8-hot-reload-and-zero-downtime-pattern)
-9. [Load Balancing Architecture](#9-load-balancing-architecture)
-10. [Health Checking and Circuit Breaker](#10-health-checking-and-circuit-breaker)
-11. [Plugin System Architecture](#11-plugin-system-architecture)
-12. [Data Flow - Complete Request Lifecycle](#12-data-flow---complete-request-lifecycle)
-13. [Connection Pool Management](#13-connection-pool-management)
-14. [Monitoring and Observability](#14-monitoring-and-observability)
-15. [Configuration Management](#15-configuration-management)
+- [Only1MCP Architecture Diagrams](#only1mcp-architecture-diagrams)
+  - [Comprehensive Technical Visualization for Initial Development](#comprehensive-technical-visualization-for-initial-development)
+  - [Table of Contents](#table-of-contents)
+  - [1. Overall System Architecture](#1-overall-system-architecture)
+    - [High-Level System Overview](#high-level-system-overview)
+  - [2. Core Component Architecture](#2-core-component-architecture)
+    - [Internal Component Relationships](#internal-component-relationships)
+  - [3. Request Routing and Transport Layer](#3-request-routing-and-transport-layer)
+    - [Multi-Transport Architecture](#multi-transport-architecture)
+    - [STDIO Process Management](#stdio-process-management)
+    - [HTTP Connection Pooling](#http-connection-pooling)
+  - [4. Security Architecture](#4-security-architecture)
+    - [Defense-in-Depth Security Layers](#defense-in-depth-security-layers)
+  - [5. Authentication and Authorization Flow](#5-authentication-and-authorization-flow)
+    - [Complete Auth Flow with RBAC](#complete-auth-flow-with-rbac)
+  - [6. Context Optimization Pipeline](#6-context-optimization-pipeline)
+    - [Token Reduction Architecture](#token-reduction-architecture)
+  - [7. Caching Strategy Architecture](#7-caching-strategy-architecture)
+    - [Multi-Layer Cache Design](#multi-layer-cache-design)
+  - [8. Hot-Reload and Zero-Downtime Pattern](#8-hot-reload-and-zero-downtime-pattern)
+    - [Configuration Hot-Reload Mechanism](#configuration-hot-reload-mechanism)
+  - [9. Load Balancing Architecture](#9-load-balancing-architecture)
+    - [Consistent Hashing with Health-Aware Fallback](#consistent-hashing-with-health-aware-fallback)
+    - [1. Consistent Hashing (Primary)](#1-consistent-hashing-primary)
+    - [2. Least Connections (Fallback)](#2-least-connections-fallback)
+  - [10. Health Checking and Circuit Breaker](#10-health-checking-and-circuit-breaker)
+    - [Hybrid Health Monitoring](#hybrid-health-monitoring)
+    - [Health Check Implementation](#health-check-implementation)
+  - [11. Plugin System Architecture](#11-plugin-system-architecture)
+    - [Native Rust + WASM Dual Architecture](#native-rust--wasm-dual-architecture)
+  - [12. Data Flow - Complete Request Lifecycle](#12-data-flow---complete-request-lifecycle)
+    - [End-to-End Request Processing](#end-to-end-request-processing)
+  - [13. Connection Pool Management](#13-connection-pool-management)
+    - [Per-Backend Connection Pooling](#per-backend-connection-pooling)
+  - [14. Monitoring and Observability](#14-monitoring-and-observability)
+    - [Comprehensive Observability Stack](#comprehensive-observability-stack)
+    - [Performance Metrics](#performance-metrics)
+  - [15. Configuration Management](#15-configuration-management)
+    - [Configuration Schema and Validation](#configuration-schema-and-validation)
+  - [Summary](#summary)
 
 ---
 
@@ -51,7 +77,7 @@ graph TB
             Router[Request Router<br/>Axum Framework]
             Registry[Server Registry<br/>Arc RwLock HashMap]
             LB[Load Balancer<br/>Consistent Hash]
-            
+
             subgraph "Context Optimizer"
                 Cache[Multi-Layer Cache<br/>DashMap LRU]
                 Batcher[Request Batcher<br/>100ms windows]
@@ -147,7 +173,7 @@ graph TB
     classDef core fill:#fff3e0,stroke:#e65100,stroke-width:3px
     classDef backend fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
     classDef config fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
-    
+
     class TLS,Auth,RateLimit ingress
     class Router,Registry,LB,Cache,Batcher core
     class FS,GH,WEB,CUSTOM backend
@@ -155,6 +181,7 @@ graph TB
 ```
 
 **Key Metrics & Targets:**
+
 - **Latency Overhead:** <5ms (p99)
 - **Throughput:** 10k+ req/s
 - **Token Reduction:** 50-70% via optimization
@@ -237,7 +264,7 @@ graph TB
     classDef state fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
     classDef process fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef background fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
-    
+
     class AppState,ServerReg,HashRing,ConfigState state
     class RequestValidator,ToolMatcher,ServerSelector process
     class HealthMonitor,ConfigWatcher,CacheEvictor,MetricsCollector background
@@ -347,7 +374,7 @@ graph TB
 
     classDef transport fill:#e1f5ff,stroke:#01579b,stroke-width:2px
     classDef process fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    
+
     class STDIOPool,HTTPPool,SSEConnect,WSUpgrade transport
     class ParseJSON,ValidateResp,ErrorMap process
 ```
@@ -355,6 +382,7 @@ graph TB
 **Transport-Specific Implementation Details:**
 
 ### STDIO Process Management
+
 ```rust
 // Process lifecycle: spawn → communicate → terminate
 // stdin: length-prefix (u32 BE) + JSON payload
@@ -364,6 +392,7 @@ graph TB
 ```
 
 ### HTTP Connection Pooling
+
 ```rust
 // reqwest::Client with connection pool
 // max_connections_per_host: 100
@@ -388,19 +417,19 @@ graph TB
 
     subgraph "Authentication Layer"
         AuthSelect{Auth<br/>Method}
-        
+
         subgraph "OAuth2/OIDC"
             OAuthProvider[Provider Config<br/>Okta/Azure AD/GitHub]
             OAuthExchange[Code Exchange<br/>PKCE flow]
             TokenValidate[Token Validation<br/>JWT verify + expiry]
         end
-        
+
         subgraph "API Key"
             APIKeyExtract[Extract from Header<br/>X-API-Key/Bearer]
             APIKeyHash[Compare Hash<br/>bcrypt/Argon2]
             APIKeyRotate[Auto-rotation<br/>30-90 days]
         end
-        
+
         subgraph "mTLS"
             ClientCert[Client Certificate<br/>X.509 validation]
             CertRevoke[Revocation Check<br/>OCSP/CRL]
@@ -409,11 +438,11 @@ graph TB
 
     subgraph "Authorization Layer - RBAC"
         RoleCheck{User<br/>Role?}
-        
+
         AdminPerms[Admin Role<br/>Full access]
         DevPerms[Developer Role<br/>Tool subset]
         ReadOnlyPerms[Read-Only Role<br/>List/view only]
-        
+
         ToolACL[Tool-Level ACL<br/>Granular permissions]
         ServerACL[Server-Level ACL<br/>Backend restrictions]
     end
@@ -446,11 +475,11 @@ graph TB
     AuthSelect -->|OAuth2/OIDC| OAuthProvider
     OAuthProvider --> OAuthExchange
     OAuthExchange --> TokenValidate
-    
+
     AuthSelect -->|API Key| APIKeyExtract
     APIKeyExtract --> APIKeyHash
     APIKeyHash --> APIKeyRotate
-    
+
     AuthSelect -->|mTLS| ClientCert
     ClientCert --> CertRevoke
 
@@ -458,11 +487,11 @@ graph TB
     TokenValidate --> RoleCheck
     APIKeyHash --> RoleCheck
     CertRevoke --> RoleCheck
-    
+
     RoleCheck -->|admin| AdminPerms
     RoleCheck -->|developer| DevPerms
     RoleCheck -->|readonly| ReadOnlyPerms
-    
+
     AdminPerms --> ToolACL
     DevPerms --> ToolACL
     ReadOnlyPerms --> ToolACL
@@ -490,7 +519,7 @@ graph TB
     classDef auth fill:#e8eaf6,stroke:#283593,stroke-width:3px
     classDef authz fill:#f3e5f5,stroke:#6a1b9a,stroke-width:3px
     classDef protection fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
-    
+
     class TLS13,Firewall,DDoS network
     class OAuthProvider,APIKeyExtract,ClientCert auth
     class RoleCheck,ToolACL,ServerACL authz
@@ -529,30 +558,30 @@ sequenceDiagram
 
     Client->>Proxy: Initial Request<br/>No credentials
     Proxy->>Client: 401 Unauthorized<br/>WWW-Authenticate: OAuth2
-    
+
     Client->>AuthProvider: GET /authorize<br/>client_id, redirect_uri, state, PKCE
     AuthProvider->>Client: User login page
     Client->>AuthProvider: POST credentials
     AuthProvider->>Client: 302 Redirect with code
-    
+
     Client->>Proxy: GET /callback?code=xyz&state=abc
     Proxy->>AuthProvider: POST /token<br/>code, code_verifier (PKCE)
     AuthProvider->>Proxy: access_token, refresh_token, id_token
-    
+
     Proxy->>Proxy: Validate JWT signature<br/>Check expiry, issuer, audience
     Proxy->>RBAC: Extract claims<br/>sub, roles, permissions
-    
+
     Note over Proxy,Audit: Authorization Check
-    
+
     Client->>Proxy: MCP Request<br/>Authorization: Bearer <token>
     Proxy->>Proxy: Extract JWT from header
     Proxy->>Proxy: Verify token signature + expiry
-    
+
     Proxy->>RBAC: Check permission<br/>user_id, tool_name, server_id
     RBAC->>RBAC: Load user roles<br/>(admin/developer/readonly)
     RBAC->>RBAC: Check tool ACL<br/>Role → Tool mapping
     RBAC->>RBAC: Check server ACL<br/>Role → Server mapping
-    
+
     alt Permission Granted
         RBAC->>Proxy: Authorized ✓
         Proxy->>Audit: Log: ACCESS_GRANTED<br/>user, tool, timestamp
@@ -564,17 +593,17 @@ sequenceDiagram
         Proxy->>Audit: Log: ACCESS_DENIED<br/>user, tool, reason, timestamp
         Proxy->>Client: 403 Forbidden<br/>Insufficient permissions
     end
-    
+
     Note over Client,Audit: Token Refresh Flow
-    
+
     Client->>Proxy: Request with expired token
     Proxy->>Proxy: Detect token expiry
     Proxy->>AuthProvider: POST /token<br/>grant_type=refresh_token
     AuthProvider->>Proxy: New access_token
     Proxy->>Client: New token in response header
-    
+
     Note over Client,Audit: Admin Operations
-    
+
     Client->>Proxy: Admin API call<br/>(add server, change config)
     Proxy->>RBAC: Check role = admin
     alt Is Admin
@@ -597,14 +626,14 @@ rbac:
     - name: admin
       permissions:
         - "*"  # Full access
-      
+
     - name: developer
       permissions:
         - "filesystem:*"
         - "github:*"
         - "web_search"
         - "!admin:*"  # Explicit deny admin tools
-      
+
     - name: readonly
       permissions:
         - "filesystem:read_file"
@@ -614,10 +643,10 @@ rbac:
   users:
     - email: "admin@company.com"
       roles: ["admin"]
-    
+
     - email: "dev@company.com"
       roles: ["developer"]
-    
+
     - email: "analyst@company.com"
       roles: ["readonly"]
 ```
@@ -687,23 +716,23 @@ graph TB
     MCPRequest --> RequestSize
     RequestSize --> CacheKey
     CacheKey --> CacheLookup
-    
+
     %% Cache hit path
     CacheLookup -->|Hit| CacheValidate
     CacheValidate -->|Valid| CacheHit
     CacheValidate -->|Stale| BatchQueue
     CacheHit --> OptimizedResp
-    
+
     %% Cache miss path
     CacheLookup -->|Miss| BatchQueue
-    
+
     %% Batching
     BatchQueue --> BatchAccumulate
     BatchAccumulate -->|No| BatchQueue
     BatchAccumulate -->|Yes| BatchCombine
     BatchCombine --> BatchMetrics
     BatchMetrics --> ToolRegistry
-    
+
     %% Dynamic loading
     ToolRegistry --> SchemaCheck
     SchemaCheck -->|Loaded| CompressSelect
@@ -711,7 +740,7 @@ graph TB
     SchemaStub --> SchemaPrediction
     SchemaPrediction --> SchemaLoad
     SchemaLoad --> CompressSelect
-    
+
     %% Compression
     CompressSelect -->|<1KB| CompressGzip
     CompressSelect -->|1-10KB| CompressZstd
@@ -720,24 +749,24 @@ graph TB
     CompressZstd --> CompressDictionary
     CompressBrotli --> CompressDictionary
     CompressDictionary --> ResponseParse
-    
+
     %% Response trimming
     ResponseParse --> FieldFilter
     FieldFilter --> JSONMinify
     JSONMinify --> SchemaValidate
     SchemaValidate --> TokenCounter
-    
+
     %% Metrics
     TokenCounter --> SavingsCalc
     SavingsCalc --> MetricsExport
     SchemaValidate --> OptimizedResp
-    
+
     %% Cache store
     OptimizedResp --> CacheStore
 
     classDef optimization fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
     classDef metrics fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
-    
+
     class CacheKey,BatchCombine,SchemaLoad,CompressZstd,FieldFilter optimization
     class TokenCounter,SavingsCalc,MetricsExport metrics
 ```
@@ -873,7 +902,7 @@ graph TB
     classDef cache fill:#e3f2fd,stroke:#0d47a1,stroke-width:2px
     classDef operation fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef metrics fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
-    
+
     class L1Hot,L2Warm,L3Cold,L4Disk cache
     class CacheGet,CacheSet,CacheInvalidate operation
     class HitRate,MissRate,EvictionCount metrics
@@ -885,25 +914,25 @@ graph TB
 context_optimization:
   cache:
     enabled: true
-    
+
     # L1: Hot tools (frequently used)
     l1_hot:
       max_entries: 1000
       ttl_seconds: 300      # 5 minutes
       eviction: lru
-      
+
     # L2: Warm resources (moderately used)
     l2_warm:
       max_entries: 5000
       ttl_seconds: 1800     # 30 minutes
       eviction: lru
-      
+
     # L3: Cold prompts (rarely used)
     l3_cold:
       max_entries: 10000
       ttl_seconds: 7200     # 2 hours
       eviction: lru
-      
+
     # L4: Persistent cache (optional)
     l4_persistent:
       enabled: false
@@ -911,7 +940,7 @@ context_optimization:
       url: "redis://localhost:6379"
       ttl_seconds: 86400    # 24 hours
       max_size_mb: 100000   # 100GB
-    
+
     # Tool-specific overrides
     tool_overrides:
       read_file:
@@ -1197,6 +1226,7 @@ graph TB
 **Load Balancing Algorithms:**
 
 ### 1. Consistent Hashing (Primary)
+
 ```rust
 // Consistent hash ring implementation
 pub struct ConsistentHashRing {
@@ -1228,11 +1258,13 @@ pub fn get_server(&self, request: &McpRequest) -> Option<&ServerId> {
 ```
 
 **Benefits:**
+
 - Minimal key remapping on server add/remove (only K/n keys)
 - Even load distribution with sufficient virtual nodes
 - Deterministic routing (same request → same server)
 
 ### 2. Least Connections (Fallback)
+
 ```rust
 // Power of Two Choices algorithm: O(1)
 pub fn select_least_loaded(&self, backends: &[ServerId]) -> ServerId {
@@ -1252,6 +1284,7 @@ pub fn select_least_loaded(&self, backends: &[ServerId]) -> ServerId {
 ```
 
 **Benefits:**
+
 - Balances load without global state
 - Converges to optimal distribution
 - Fast selection (constant time)
@@ -2119,6 +2152,7 @@ graph TB
 **Key Metrics to Monitor:**
 
 ### Performance Metrics
+
 ```
 # Request metrics
 only1mcp_requests_total{method, status}           # Counter
@@ -2461,6 +2495,7 @@ This comprehensive architecture diagram collection provides detailed technical v
 15. **Configuration** - Schema, validation, hot-reload
 
 These diagrams serve as the definitive technical reference for implementing Only1MCP's core features with:
+
 - **<5ms latency overhead** (p99)
 - **10k+ req/s throughput**
 - **50-70% token reduction**
@@ -2471,7 +2506,7 @@ All patterns and architectures are production-ready, validated by research, and 
 
 ---
 
-**Document End**  
-**Version:** 1.0  
-**Last Updated:** October 14, 2025  
+**Document End**
+**Version:** 1.0
+**Last Updated:** October 14, 2025
 **Status:** Technical Specification - Initial Development Phase

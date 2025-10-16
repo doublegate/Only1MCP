@@ -1,7 +1,7 @@
 //! JWT token creation, validation, and rotation with RS256 signatures.
 //! Implements secure token lifecycle management with refresh tokens.
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use dashmap::DashSet;
 use jsonwebtoken::{
     decode, encode, errors::Error as JwtError, Algorithm, DecodingKey, EncodingKey, Header,
@@ -139,8 +139,8 @@ pub struct JwtManager {
     /// Previous keys for validation during rotation
     previous_keys: Arc<RwLock<Vec<DecodingKey>>>,
 
-    /// Key rotation schedule
-    rotation_schedule: Duration,
+    /// Key rotation schedule (for future key rotation feature)
+    _rotation_schedule: Duration,
 
     /// Token configuration
     config: JwtConfig,
@@ -150,10 +150,13 @@ pub struct JwtManager {
 
     /// Token store for refresh tokens
     refresh_tokens: Arc<DashSet<String>>,
+
+    /// Algorithm to use (HS256 for HMAC, RS256 for RSA)
+    algorithm: Algorithm,
 }
 
 impl JwtManager {
-    /// Create new JWT manager
+    /// Create new JWT manager with HMAC secret (HS256)
     pub fn new(config: JwtConfig, secret: &[u8]) -> Result<Self, Error> {
         let encoding_key = EncodingKey::from_secret(secret);
         let decoding_key = DecodingKey::from_secret(secret);
@@ -162,14 +165,15 @@ impl JwtManager {
             current_key: Arc::new(RwLock::new(encoding_key)),
             decoding_key: Arc::new(RwLock::new(decoding_key)),
             previous_keys: Arc::new(RwLock::new(Vec::new())),
-            rotation_schedule: config.key_rotation_interval,
+            _rotation_schedule: config.key_rotation_interval,
             config,
             revoked: Arc::new(DashSet::new()),
             refresh_tokens: Arc::new(DashSet::new()),
+            algorithm: Algorithm::HS256,
         })
     }
 
-    /// Create new JWT manager with RSA keys
+    /// Create new JWT manager with RSA keys (RS256)
     pub fn new_with_rsa(
         config: JwtConfig,
         private_key: &[u8],
@@ -182,10 +186,11 @@ impl JwtManager {
             current_key: Arc::new(RwLock::new(encoding_key)),
             decoding_key: Arc::new(RwLock::new(decoding_key)),
             previous_keys: Arc::new(RwLock::new(Vec::new())),
-            rotation_schedule: config.key_rotation_interval,
+            _rotation_schedule: config.key_rotation_interval,
             config,
             revoked: Arc::new(DashSet::new()),
             refresh_tokens: Arc::new(DashSet::new()),
+            algorithm: Algorithm::RS256,
         })
     }
 
@@ -211,7 +216,7 @@ impl JwtManager {
         };
 
         // Sign with configured algorithm
-        let header = Header::new(Algorithm::RS256);
+        let header = Header::new(self.algorithm);
         let key = self.current_key.read().await;
         let token = encode(&header, &claims, &key)?;
 
@@ -242,7 +247,7 @@ impl JwtManager {
             client_id: identity.client_id.clone(),
         };
 
-        let header = Header::new(Algorithm::RS256);
+        let header = Header::new(self.algorithm);
         let key = self.current_key.read().await;
         let token = encode(&header, &claims, &key)?;
 
@@ -255,7 +260,7 @@ impl JwtManager {
     /// Validate and decode token
     pub async fn validate_token(&self, token: &str) -> Result<Claims, Error> {
         // Setup validation rules
-        let mut validation = Validation::new(Algorithm::RS256);
+        let mut validation = Validation::new(self.algorithm);
         validation.set_issuer(&[&self.config.issuer]);
         validation.set_audience(&self.config.audience);
         validation.validate_exp = true;

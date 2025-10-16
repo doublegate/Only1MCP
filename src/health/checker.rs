@@ -1,30 +1,28 @@
 //! Health checking combines active probes with passive request monitoring
 //! to quickly detect failures while minimizing overhead.
 
-use crate::error::{Error, Result};
-use crate::types::ServerId;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::{interval, MissedTickBehavior};
 use tracing::{debug, error, info, warn};
 
 /// Comprehensive health check manager
 pub struct HealthCheckManager {
-    /// Active health checkers per backend
-    checkers: Arc<DashMap<String, Arc<HealthChecker>>>,
+    /// Active health checkers per backend (for future active health checking feature)
+    _checkers: Arc<DashMap<String, Arc<HealthChecker>>>,
 
-    /// Health status cache
-    status_cache: Arc<DashMap<String, HealthStatus>>,
+    /// Health status cache (for future health status caching feature)
+    _status_cache: Arc<DashMap<String, HealthStatus>>,
 
-    /// Configuration
-    config: HealthConfig,
+    /// Configuration (for future dynamic health check configuration)
+    _config: HealthConfig,
 
-    /// Metrics
-    metrics: Arc<HealthMetrics>,
+    /// Metrics (for future health check metrics)
+    _metrics: Arc<HealthMetrics>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +50,12 @@ pub struct HealthStatus {
 
     /// Resource usage
     pub resources: ResourceMetrics,
+}
+
+impl Default for HealthStatus {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HealthStatus {
@@ -194,7 +198,7 @@ impl HealthChecker {
                 } else {
                     HealthCheckResult::Failure {
                         reason: format!("HTTP {}", response.status()),
-                        latency: Some(latency),
+                        _latency: Some(latency),
                     }
                 }
             },
@@ -209,7 +213,7 @@ impl HealthChecker {
                     } else {
                         e.to_string()
                     },
-                    latency: Some(latency),
+                    _latency: Some(latency),
                 }
             },
         }
@@ -245,7 +249,7 @@ impl HealthChecker {
                     status.state = HealthState::Healthy;
                 }
             },
-            HealthCheckResult::Failure { reason, latency: _ } => {
+            HealthCheckResult::Failure { reason, _latency: _ } => {
                 status.last_failure = Some(Instant::now());
                 status.failure_count += 1;
                 status.success_count = 0;
@@ -318,10 +322,10 @@ impl PassiveHealthMonitor {
 
     /// Record request outcome for passive monitoring
     pub async fn record_request(&self, backend_id: &str, success: bool, latency: Duration) {
-        let mut stats = self
+        let stats = self
             .request_stats
             .entry(backend_id.to_string())
-            .or_insert_with(RequestStats::new);
+            .or_default();
 
         stats.record(success, latency);
 
@@ -329,11 +333,12 @@ impl PassiveHealthMonitor {
         if stats.should_trip_circuit_breaker(&self.config) {
             self.circuit_breakers.trip(backend_id).await;
 
+            let p99 = stats.p99_latency().await;
             warn!(
                 "Circuit breaker tripped for {} (error_rate: {:.2}%, latency: {:?})",
                 backend_id,
                 stats.error_rate() * 100.0,
-                stats.p99_latency()
+                p99
             );
         }
     }
@@ -364,7 +369,7 @@ enum HealthCheckResult {
     },
     Failure {
         reason: String,
-        latency: Option<Duration>,
+        _latency: Option<Duration>,
     },
 }
 
@@ -418,7 +423,13 @@ pub struct RequestStats {
     failure_count: AtomicU64,
     total_latency_ms: AtomicU64,
     latencies: RwLock<Vec<Duration>>,
-    window_start: RwLock<Instant>,
+    _window_start: RwLock<Instant>,
+}
+
+impl Default for RequestStats {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RequestStats {
@@ -428,7 +439,7 @@ impl RequestStats {
             failure_count: AtomicU64::new(0),
             total_latency_ms: AtomicU64::new(0),
             latencies: RwLock::new(Vec::new()),
-            window_start: RwLock::new(Instant::now()),
+            _window_start: RwLock::new(Instant::now()),
         }
     }
 
@@ -463,20 +474,17 @@ impl RequestStats {
         }
     }
 
-    pub fn p99_latency(&self) -> Duration {
-        if let Ok(latencies) = self.latencies.read() {
-            if latencies.is_empty() {
-                return Duration::ZERO;
-            }
-
-            let mut sorted = latencies.clone();
-            sorted.sort();
-
-            let index = ((sorted.len() as f64 * 0.99) as usize).min(sorted.len() - 1);
-            sorted[index]
-        } else {
-            Duration::ZERO
+    pub async fn p99_latency(&self) -> Duration {
+        let latencies = self.latencies.read().await;
+        if latencies.is_empty() {
+            return Duration::ZERO;
         }
+
+        let mut sorted = latencies.clone();
+        sorted.sort();
+
+        let index = ((sorted.len() as f64 * 0.99) as usize).min(sorted.len() - 1);
+        sorted[index]
     }
 
     pub fn should_trip_circuit_breaker(&self, config: &PassiveHealthConfig) -> bool {

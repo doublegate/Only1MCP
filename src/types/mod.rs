@@ -14,6 +14,16 @@ pub struct McpRequest {
 }
 
 impl McpRequest {
+    /// Create a new MCP request
+    pub fn new(method: impl Into<String>, params: Value, id: Option<Value>) -> Self {
+        Self {
+            jsonrpc: "2.0".to_string(),
+            id,
+            method: method.into(),
+            params: Some(params),
+        }
+    }
+
     /// Get the method name
     pub fn method(&self) -> String {
         self.method.clone()
@@ -89,6 +99,11 @@ impl McpResponse {
             error: Some(error),
         }
     }
+
+    /// Get the result field (if success)
+    pub fn result(&self) -> Option<&Value> {
+        self.result.as_ref()
+    }
 }
 
 /// MCP error object
@@ -138,6 +153,32 @@ pub struct Tool {
     pub description: Option<String>,
     #[serde(rename = "inputSchema")]
     pub input_schema: Value,
+}
+
+/// MCP Resource definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resource {
+    pub uri: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "mimeType")]
+    pub mime_type: Option<String>,
+}
+
+/// MCP Prompt definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Prompt {
+    pub name: String,
+    pub description: Option<String>,
+    pub arguments: Option<Vec<PromptArgument>>,
+}
+
+/// Prompt argument definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptArgument {
+    pub name: String,
+    pub description: Option<String>,
+    pub required: Option<bool>,
 }
 
 /// Server identifier

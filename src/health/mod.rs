@@ -1,8 +1,5 @@
 //! Health checking for backend servers
 
-use std::time::Duration;
-use tokio::time::interval;
-
 pub mod checker;
 pub mod circuit_breaker;
 

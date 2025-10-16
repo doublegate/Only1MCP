@@ -4,7 +4,6 @@
 //! multiple MCP servers behind a unified interface.
 
 use crate::{config::Config, error::Result};
-use std::sync::Arc;
 
 pub mod handler;
 pub mod registry;

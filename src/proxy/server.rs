@@ -13,19 +13,15 @@
 //! - Prometheus metrics and OpenTelemetry tracing
 
 use axum::{
-    body::Body,
-    extract::{Json, Path, Query, State},
-    http::{HeaderMap, Request, Response, StatusCode},
-    middleware::{self, from_fn_with_state},
+    extract::State,
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
-use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
-use tracing::{debug, error, info};
+use tracing::info;
 
 use crate::{
     cache::ResponseCache,
@@ -59,6 +55,8 @@ pub struct AppState {
     pub registry: Arc<RwLock<ServerRegistry>>,
     pub cache: Arc<ResponseCache>,
     pub metrics: Arc<Metrics>,
+    pub http_transport: Option<Arc<crate::transport::http::HttpTransportPool>>,
+    pub stdio_transport: Option<Arc<crate::transport::stdio::StdioTransport>>,
 }
 
 impl ProxyServer {
@@ -98,12 +96,30 @@ impl ProxyServer {
 
     /// Build the Axum router with all routes and middleware.
     fn build_router(&self) -> Router {
+        // Initialize HTTP transport pool manager
+        // Note: We use a shared pool that can handle connections to multiple backends
+        let http_transport = Some(Arc::new(crate::transport::http::HttpTransportPool::new()));
+
+        // Initialize STDIO transport if any STDIO servers are configured
+        let stdio_transport = if self
+            .config
+            .servers
+            .iter()
+            .any(|s| matches!(s.transport, crate::config::TransportConfig::Stdio { .. }))
+        {
+            Some(Arc::new(crate::transport::stdio::StdioTransport::new()))
+        } else {
+            None
+        };
+
         // Create shared application state
         let app_state = AppState {
             config: self.config.clone(),
             registry: self.registry.clone(),
             cache: self.cache.clone(),
             metrics: self.metrics.clone(),
+            http_transport,
+            stdio_transport,
         };
 
         // Build main MCP protocol routes
@@ -127,21 +143,14 @@ impl ProxyServer {
         Router::new()
             .nest("/", mcp_routes)
             .nest("/api/v1/admin", admin_routes)
-            .layer(
-                ServiceBuilder::new()
-                    // CORS for browser-based clients
-                    .layer(CorsLayer::permissive())
-
-                    // Compression for responses
-                    .layer(CompressionLayer::new())
-
-                    // Request timeout (30s default)
-                    .layer(tower::timeout::TimeoutLayer::new(Duration::from_secs(30)))
-
-                    // Request/response tracing
-                    .layer(TraceLayer::new_for_http()),
-            )
             .with_state(app_state)
+            // Apply middleware in reverse order (innermost first)
+            .layer(TraceLayer::new_for_http())
+            // Note: TimeoutLayer commented out due to type incompatibility with Axum 0.7
+            // Individual handlers should implement their own timeouts
+            // .layer(tower::timeout::TimeoutLayer::new(Duration::from_secs(30)))
+            .layer(CompressionLayer::new())
+            .layer(CorsLayer::permissive())
     }
 
     /// Start the proxy server and begin accepting connections.
@@ -163,9 +172,10 @@ impl ProxyServer {
         info!("Server listening on {}", addr);
 
         // Run server with graceful shutdown
+        let mut shutdown_rx = self.shutdown_tx.subscribe();
         axum::serve(listener, router)
-            .with_graceful_shutdown(async {
-                let _ = self.shutdown_tx.subscribe().recv().await;
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.recv().await;
                 info!("Shutting down proxy server gracefully...");
             })
             .await
@@ -188,7 +198,7 @@ async fn health_check_handler(State(state): State<AppState>) -> impl IntoRespons
 
     // Check if registry has any servers
     let registry = state.registry.read().await;
-    let server_count = registry.servers.len();
+    let server_count = registry.len();
 
     let status = if server_count > 0 { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
 

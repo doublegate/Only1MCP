@@ -9,6 +9,7 @@
 //! - Health-aware routing with automatic failover
 
 use crate::error::Result;
+use crate::types::ServerId;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -17,11 +18,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use xxhash_rust::xxh3::Xxh3;
-
-/// Server identifier type
-pub type ServerId = String;
 
 /// Routing algorithm selection
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
@@ -89,7 +87,7 @@ pub enum HashKey {
 }
 
 /// Health state for a backend server
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HealthState {
     /// Number of consecutive successes
     consecutive_successes: AtomicUsize,
@@ -101,6 +99,12 @@ pub struct HealthState {
     last_failure: AtomicU64,
     /// Average latency in microseconds
     avg_latency_us: AtomicU64,
+}
+
+impl Default for HealthState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HealthState {
@@ -249,7 +253,7 @@ impl LoadBalancer {
         if healthy_servers.is_empty() {
             warn!("All backends unhealthy for key: {}", key);
             // Fall back to all servers if none are healthy
-            return self.route(&eligible_servers.to_vec(), key).await;
+            return self.route(eligible_servers, key).await;
         }
 
         // Apply routing algorithm
@@ -279,11 +283,7 @@ impl LoadBalancer {
             RoutingAlgorithm::LeastConnections => self.route_least_connections(servers),
             RoutingAlgorithm::RoundRobin => self.route_round_robin(servers),
             RoutingAlgorithm::Random => self.route_random(servers),
-            RoutingAlgorithm::WeightedRandom => {
-                // For now, treat as regular random
-                // TODO: Implement weight-based selection
-                self.route_random(servers)
-            },
+            RoutingAlgorithm::WeightedRandom => self.route_weighted_random(servers),
         }
     }
 
@@ -320,7 +320,7 @@ impl LoadBalancer {
         // Select server with minimum connections
         let selected = candidates
             .into_iter()
-            .min_by_key(|&&id| {
+            .min_by_key(|&id| {
                 self.connection_counts
                     .get(id)
                     .map(|count| count.load(Ordering::Relaxed))
@@ -351,9 +351,36 @@ impl LoadBalancer {
 
         let mut rng = rand::thread_rng();
         servers
-            .choose(&mut rng)
-            .map(|s| s.clone())
+            .choose(&mut rng).cloned()
             .ok_or_else(|| crate::error::Error::NoBackendAvailable("".to_string()))
+    }
+
+    /// Weighted random server selection
+    /// Note: Weights should be provided by ServerInfo in the registry.
+    /// For now, this implementation uses equal weights (default to 1).
+    /// Full weight-based selection is handled at the RequestRouter level.
+    fn route_weighted_random(&self, servers: &[ServerId]) -> Result<ServerId> {
+        use rand::Rng;
+
+        if servers.is_empty() {
+            return Err(crate::error::Error::NoBackendAvailable("".to_string()));
+        }
+
+        // For now, use equal weights since HealthState doesn't store weights
+        // In a full implementation, weights would come from ServerInfo via the registry
+        let default_weight = 1u32;
+        let total_weight = servers.len() as u32 * default_weight;
+
+        // Generate random number in range [0, total_weight)
+        let mut rng = rand::thread_rng();
+        let random_weight = rng.gen_range(0..total_weight);
+
+        // Select server based on weighted probability
+        let selected_index = (random_weight / default_weight) as usize;
+        let server_id = &servers[selected_index];
+
+        debug!("Weighted random selected: {} (equal weights)", server_id);
+        Ok(server_id.clone())
     }
 
     /// Add a server to the load balancer
@@ -361,7 +388,7 @@ impl LoadBalancer {
         // Initialize health state
         self.health_states
             .entry(server_id.clone())
-            .or_insert_with(|| HealthState::new());
+            .or_default();
 
         // Add to consistent hash ring if using that algorithm
         if self.config.algorithm == RoutingAlgorithm::ConsistentHash {
@@ -401,7 +428,7 @@ impl LoadBalancer {
         let health = self
             .health_states
             .entry(server_id.clone())
-            .or_insert_with(|| HealthState::new());
+            .or_default();
 
         if success {
             health.record_success(latency);
@@ -488,6 +515,11 @@ impl ConsistentHashRing {
         );
     }
 
+    /// Add a node to the hash ring (alias for add_server for compatibility).
+    pub fn add_node(&mut self, node: String) {
+        self.add_server(&node);
+    }
+
     /// Remove a server from the hash ring
     pub fn remove_server(&mut self, server_id: &ServerId) {
         self.ring.retain(|_, (id, _)| id != server_id);
@@ -502,6 +534,26 @@ impl ConsistentHashRing {
 
         // Check servers in order starting from hash position
         start_iter.chain(wrap_iter).find(|&id| eligible_servers.contains(id))
+    }
+
+    /// Find the node for a given key from available nodes using consistent hashing.
+    pub fn get_node<'a>(&self, key: &str, available_nodes: &'a [String]) -> Option<&'a String> {
+        if available_nodes.is_empty() {
+            return None;
+        }
+
+        // Hash the key
+        let key_hash = xxhash_rust::xxh3::xxh3_64(key.as_bytes());
+
+        // Find first node with hash >= key_hash (circular search)
+        let start_iter = self.ring.range(key_hash..).map(|(_, (id, _))| id);
+        let wrap_iter = self.ring.iter().map(|(_, (id, _))| id);
+
+        // Find the first server in the ring that's in available_nodes
+        let selected = start_iter.chain(wrap_iter).find(|id| available_nodes.contains(id))?;
+
+        // Return reference to the string in available_nodes (for lifetime reasons)
+        available_nodes.iter().find(|n| *n == selected)
     }
 }
 

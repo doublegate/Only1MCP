@@ -3,11 +3,11 @@
 //! Supports multiple OAuth providers with automatic discovery,
 //! PKCE flow for enhanced security, and token introspection.
 
-use async_trait::async_trait;
+use base64::Engine;
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use reqwest::Url;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -126,7 +126,7 @@ impl PkceCodeVerifier {
     pub fn new_random() -> Self {
         use rand::Rng;
         let random_bytes: Vec<u8> = (0..32).map(|_| rand::thread_rng().gen::<u8>()).collect();
-        let verifier = base64::encode_config(random_bytes, base64::URL_SAFE_NO_PAD);
+        let verifier = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random_bytes);
         Self(verifier)
     }
 
@@ -146,7 +146,7 @@ impl PkceCodeChallenge {
         let mut hasher = Sha256::new();
         hasher.update(verifier.as_str());
         let result = hasher.finalize();
-        let challenge = base64::encode_config(result, base64::URL_SAFE_NO_PAD);
+        let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(result);
         Self(challenge)
     }
 
@@ -207,6 +207,12 @@ pub struct JwksCache {
     pub expires_at: DateTime<Utc>,
 }
 
+impl Default for JwksCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JwksCache {
     pub fn new() -> Self {
         Self {
@@ -222,7 +228,7 @@ impl JwksCache {
 }
 
 /// Token info from introspection
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TokenInfo {
     pub active: bool,
     pub scope: Option<String>,
@@ -239,8 +245,8 @@ pub struct OAuth2Authenticator {
     /// OAuth provider configurations
     providers: HashMap<String, OAuthProvider>,
 
-    /// JWKS cache for token validation
-    jwks_cache: Arc<RwLock<HashMap<String, JwksCache>>>,
+    /// JWKS cache for token validation (for future JWKS validation feature)
+    _jwks_cache: Arc<RwLock<HashMap<String, JwksCache>>>,
 
     /// Active authorization codes (for PKCE flow)
     auth_codes: Arc<DashMap<String, PendingAuth>>,
@@ -282,7 +288,7 @@ impl OAuth2Authenticator {
 
         Ok(Self {
             providers,
-            jwks_cache: Arc::new(RwLock::new(HashMap::new())),
+            _jwks_cache: Arc::new(RwLock::new(HashMap::new())),
             auth_codes: Arc::new(DashMap::new()),
             introspection_cache: Arc::new(DashMap::new()),
             config,
@@ -405,7 +411,8 @@ impl OAuth2Authenticator {
         }
 
         // Decode the payload
-        let payload = base64::decode_config(parts[1], base64::URL_SAFE_NO_PAD)
+        let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(parts[1])
             .map_err(|e| OAuthError::ValidationError(e.to_string()))?;
 
         // Parse as JSON
@@ -489,7 +496,7 @@ impl OAuth2Authenticator {
 
     /// Revoke token
     pub async fn revoke_token(&self, provider_id: &str, token: &str) -> Result<(), OAuthError> {
-        let provider = self
+        let _provider = self
             .providers
             .get(provider_id)
             .ok_or_else(|| OAuthError::UnknownProvider(provider_id.to_string()))?;
@@ -507,7 +514,7 @@ impl OAuth2Authenticator {
 fn generate_secure_random(length: usize) -> String {
     use rand::Rng;
     let random_bytes: Vec<u8> = (0..length).map(|_| rand::thread_rng().gen::<u8>()).collect();
-    base64::encode_config(random_bytes, base64::URL_SAFE_NO_PAD)
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random_bytes)
 }
 
 #[cfg(test)]

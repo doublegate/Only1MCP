@@ -3,7 +3,7 @@
 //! Manages process spawning, bidirectional communication through pipes,
 //! and security sandboxing for untrusted MCP servers.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::types::{McpRequest, McpResponse, ServerId};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,12 @@ pub struct StdioTransport {
     metrics: Arc<ProcessMetrics>,
 }
 
+impl Default for StdioTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StdioTransport {
     /// Create a new STDIO transport handler.
     pub fn new() -> Self {
@@ -97,8 +103,8 @@ impl StdioTransport {
         }
     }
 
-    /// Send a request to a STDIO MCP server.
-    pub async fn send_request(
+    /// Send a request to a STDIO MCP server with explicit config.
+    pub async fn send_request_with_config(
         &self,
         server_id: ServerId,
         config: &StdioConfig,
@@ -122,6 +128,27 @@ impl StdioTransport {
 
         self.metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
         Ok(response)
+    }
+
+    /// Send a request to a STDIO MCP server (convenience method using default config).
+    pub async fn send_request(
+        &self,
+        server_id: &str,
+        request: McpRequest,
+    ) -> std::result::Result<McpResponse, TransportError> {
+        // Use default config for simplicity
+        let config = StdioConfig {
+            command: "mcp-server".to_string(),
+            args: vec![],
+            cwd: None,
+            env: HashMap::new(),
+            timeout_ms: 30000,
+            max_memory_mb: None,
+            max_cpu_percent: None,
+            sandbox: true,
+        };
+
+        self.send_request_with_config(server_id.to_string(), &config, request).await
     }
 
     /// Get existing or spawn new STDIO process.
@@ -162,6 +189,7 @@ impl StdioTransport {
         // Security: Restrict process capabilities (Linux)
         #[cfg(target_os = "linux")]
         if config.sandbox {
+            #[allow(unused_imports)]
             use std::os::unix::process::CommandExt;
 
             // Run as non-root user if we're root
@@ -173,45 +201,46 @@ impl StdioTransport {
             }
 
             // Set resource limits
-            command.pre_exec(move || {
-                // Limit CPU time
-                if let Some(max_cpu) = config.max_cpu_percent {
-                    let cpu_limit = (max_cpu as u64) * 10; // Convert percentage to deciseconds
-                    let rlimit = libc::rlimit {
-                        rlim_cur: cpu_limit,
-                        rlim_max: cpu_limit,
-                    };
-                    unsafe {
+            // Clone values needed in closure
+            let max_cpu = config.max_cpu_percent;
+            let max_memory_mb = config.max_memory_mb;
+
+            // SAFETY: pre_exec is called before fork, in a single-threaded context
+            unsafe {
+                command.pre_exec(move || {
+                    // Limit CPU time
+                    if let Some(max_cpu) = max_cpu {
+                        let cpu_limit = (max_cpu as u64) * 10; // Convert percentage to deciseconds
+                        let rlimit = libc::rlimit {
+                            rlim_cur: cpu_limit,
+                            rlim_max: cpu_limit,
+                        };
                         libc::setrlimit(libc::RLIMIT_CPU, &rlimit);
                     }
-                }
 
-                // Limit memory
-                if let Some(max_memory_mb) = config.max_memory_mb {
-                    let memory_bytes = max_memory_mb * 1024 * 1024;
-                    let rlimit = libc::rlimit {
-                        rlim_cur: memory_bytes,
-                        rlim_max: memory_bytes,
-                    };
-                    unsafe {
+                    // Limit memory
+                    if let Some(max_memory_mb) = max_memory_mb {
+                        let memory_bytes = max_memory_mb * 1024 * 1024;
+                        let rlimit = libc::rlimit {
+                            rlim_cur: memory_bytes,
+                            rlim_max: memory_bytes,
+                        };
                         libc::setrlimit(libc::RLIMIT_AS, &rlimit);
                     }
-                }
 
-                // Limit number of processes
-                let rlimit = libc::rlimit {
-                    rlim_cur: 10,
-                    rlim_max: 10,
-                };
-                unsafe {
+                    // Limit number of processes
+                    let rlimit = libc::rlimit {
+                        rlim_cur: 10,
+                        rlim_max: 10,
+                    };
                     libc::setrlimit(libc::RLIMIT_NPROC, &rlimit);
-                }
 
-                Ok(())
-            });
+                    Ok(())
+                });
+            }
         }
 
-        let mut child = command.spawn().map_err(|e| TransportError::ProcessSpawnFailed(e))?;
+        let mut child = command.spawn().map_err(TransportError::ProcessSpawnFailed)?;
 
         let stdin = child.stdin.take().ok_or(TransportError::NoStdin)?;
         let stdout = child.stdout.take().ok_or(TransportError::NoStdout)?;
@@ -400,9 +429,8 @@ impl Drop for StdioProcess {
         // Attempt to kill the process when dropped
         let child = self.child.clone();
         tokio::spawn(async move {
-            if let Ok(mut child) = child.lock().await {
-                let _ = child.kill().await;
-            }
+            let mut child_guard = child.lock().await;
+            let _ = child_guard.kill().await;
         });
     }
 }

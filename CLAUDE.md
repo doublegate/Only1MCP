@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **IMPORTANT:** Before starting work, read **CLAUDE.local.md** for current project state, architectural decisions, and development priorities. This file is the session memory bank updated after each development session.
 
 **Quick Links:**
+
 - Current Status: See **CLAUDE.local.md** (Session Memory Bank)
 - Next Steps: See **NEXT_STEPS.md** (Immediate Action Plan)
 - Full Audit: See **docs/ARCHITECTURE_ALIGNMENT_AUDIT.md** (Complete Validation Report)
@@ -91,23 +92,27 @@ Only1MCP/
 ## Key Architecture Components
 
 ### 1. Proxy Server (`src/proxy/server.rs`)
+
 - **Framework**: Axum web framework on Tokio runtime
 - **Middleware Stack**: Auth → CORS → Compression → Rate Limiting → Router
 - **Key Types**: `ProxyServer`, `ServerState`
 - **Entry Point**: `ProxyServer::new()` → `run()`
 
 ### 2. Transport Layer (`src/transport/`)
+
 - **STDIO**: Process spawning with security sandboxing
 - **HTTP**: Connection pooling via bb8, keep-alive optimization
 - **SSE**: Long-lived connections for streaming
 - **WebSocket**: Full-duplex communication
 
 ### 3. Routing Engine (`src/routing/`)
+
 - **Consistent Hash**: Virtual nodes for even distribution
 - **Load Balancing**: Round-robin, least-connections, weighted
 - **Health-Aware**: Automatic failover on unhealthy backends
 
 ### 4. Context Optimization (`src/cache/`)
+
 - **Request Batching**: Combine multiple calls in 100ms windows
 - **Response Caching**: TTL-based with LRU eviction
 - **Compression**: Gzip/Brotli/Zstd based on client support
@@ -192,32 +197,38 @@ cargo bench
 ## Configuration
 
 The system looks for configuration in this order:
+
 1. CLI flag: `--config path/to/config.yaml`
 2. Current directory: `only1mcp.yaml` or `only1mcp.toml`
 3. Home directory: `~/.only1mcp/config.yaml`
 4. System: `/etc/only1mcp/config.yaml`
 
 ### Hot-Reload
+
 Configuration changes are automatically detected and applied without restart using the `notify` crate watching for file changes.
 
 ## Important Implementation Notes
 
 ### Error Handling
+
 - Use `Result<T, Error>` from `src/error.rs`
 - Implement proper error propagation with `?`
 - Log errors with context via `tracing`
 
 ### Async/Await
+
 - All I/O operations must be async
 - Use `tokio::spawn` for background tasks
 - Proper cancellation via `CancellationToken`
 
 ### Security
+
 - STDIO transport runs in sandboxed processes
 - All auth tokens are validated before routing
 - TLS 1.3 minimum for production
 
 ### State Management
+
 - Use `Arc<RwLock<T>>` for shared state
 - `DashMap` for concurrent hashmaps
 - `ArcSwap` for hot-reload config
@@ -276,6 +287,6 @@ valgrind --tool=memcheck ./target/release/only1mcp
 
 ## Contact & Support
 
-- GitHub: https://github.com/doublegate/Only1MCP
+- GitHub: <https://github.com/doublegate/Only1MCP>
 - Issues: Report bugs and feature requests
 - Discussions: Architecture and design decisions

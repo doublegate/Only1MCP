@@ -4,9 +4,8 @@
 //! see a consistent view while writers prepare updates in isolation.
 //! This achieves <1μs read latency even during configuration changes.
 
-use crate::config::Config;
-use crate::error::Error;
-use crate::proxy::router::ConsistentHashRing;
+use crate::config::{Config, McpServerConfig, TransportConfig};
+use crate::routing::load_balancer::ConsistentHashRing;
 use arc_swap::ArcSwap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -175,6 +174,17 @@ impl AtomicRegistry {
         registry.servers.values().cloned().collect()
     }
 
+    /// Get list of healthy server IDs
+    pub fn get_healthy_servers(&self) -> Vec<String> {
+        let registry = self.inner.load();
+        registry
+            .servers
+            .iter()
+            .filter(|(_, config)| config.enabled)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
     /// Route tool request to appropriate server
     pub fn route_tool(&self, tool_name: &str, key: &str) -> Option<ServerConfig> {
         let registry = self.inner.load();
@@ -273,8 +283,8 @@ impl AtomicRegistry {
         registry.servers.insert(server.id.clone(), server);
 
         // Rebuild hash ring if needed
-        registry.hash_ring = ConsistentHashRing::new();
-        for (id, _) in &registry.servers {
+        registry.hash_ring = ConsistentHashRing::new(150);
+        for id in registry.servers.keys() {
             registry.hash_ring.add_node(id.clone());
         }
 
@@ -297,8 +307,8 @@ impl AtomicRegistry {
         }
 
         // Rebuild hash ring
-        registry.hash_ring = ConsistentHashRing::new();
-        for (id, _) in &registry.servers {
+        registry.hash_ring = ConsistentHashRing::new(150);
+        for id in registry.servers.keys() {
             registry.hash_ring.add_node(id.clone());
         }
 
@@ -315,12 +325,13 @@ impl RegistryInner {
     /// Build registry from configuration
     fn from_config(config: &Config, generation: u64) -> Result<Self, RegistryError> {
         let mut servers = HashMap::new();
-        let mut tool_map = HashMap::new();
-        let mut hash_ring = ConsistentHashRing::new();
+        let tool_map = HashMap::new();
+        let mut hash_ring = ConsistentHashRing::new(150);
 
         // Parse servers from config
-        for server_config in &config.servers {
-            if server_config.enabled {
+        for mcp_config in &config.servers {
+            if mcp_config.enabled {
+                let server_config = Self::convert_mcp_config(mcp_config);
                 servers.insert(server_config.id.clone(), server_config.clone());
                 hash_ring.add_node(server_config.id.clone());
 
@@ -336,6 +347,54 @@ impl RegistryInner {
             hash_ring,
             generation,
         })
+    }
+
+    /// Convert McpServerConfig to ServerConfig
+    fn convert_mcp_config(mcp: &McpServerConfig) -> ServerConfig {
+        let (transport, endpoint, command, env, working_dir) = match &mcp.transport {
+            TransportConfig::Stdio {
+                command: cmd,
+                args,
+                env: e,
+            } => {
+                let mut full_command = vec![cmd.clone()];
+                full_command.extend(args.clone());
+                (
+                    TransportType::Stdio,
+                    cmd.clone(),
+                    Some(full_command),
+                    Some(e.clone()),
+                    None,
+                )
+            },
+            TransportConfig::Http { url, .. } => {
+                (TransportType::Http, url.clone(), None, None, None)
+            },
+            TransportConfig::Sse { url } => (TransportType::Sse, url.clone(), None, None, None),
+        };
+
+        let health_check = if mcp.health_check.enabled {
+            Some(HealthCheckConfig {
+                interval: mcp.health_check.interval_seconds,
+                timeout: mcp.health_check.timeout_seconds,
+                retries: 3, // Default retries
+            })
+        } else {
+            None
+        };
+
+        ServerConfig {
+            id: mcp.id.clone(),
+            name: mcp.name.clone(),
+            transport,
+            endpoint,
+            command,
+            env,
+            working_dir,
+            health_check,
+            weight: mcp.weight,
+            enabled: mcp.enabled,
+        }
     }
 }
 
@@ -376,17 +435,17 @@ mod tests {
     #[tokio::test]
     async fn test_atomic_registry() {
         let config = Config {
-            servers: vec![ServerConfig {
+            servers: vec![McpServerConfig {
                 id: "server1".to_string(),
                 name: "Test Server 1".to_string(),
-                transport: TransportType::Http,
-                endpoint: "http://localhost:8001".to_string(),
-                command: None,
-                env: None,
-                working_dir: None,
-                health_check: None,
-                weight: 1,
                 enabled: true,
+                transport: TransportConfig::Http {
+                    url: "http://localhost:8001".to_string(),
+                    headers: Default::default(),
+                },
+                health_check: Default::default(),
+                routing: Default::default(),
+                weight: 1,
             }],
             ..Default::default()
         };

@@ -14,19 +14,9 @@
 //! - **High Performance**: <5ms latency overhead, 10k+ req/s throughput
 
 use clap::{Parser, Subcommand};
+use only1mcp::{config, error, proxy, Result};
 use std::path::PathBuf;
-use tracing::{error, info};
-
-mod auth;
-mod cache;
-mod config;
-mod error;
-mod health;
-mod metrics;
-mod proxy;
-mod transport;
-
-use error::Result;
+use tracing::info;
 
 #[derive(Parser)]
 #[command(name = "only1mcp")]

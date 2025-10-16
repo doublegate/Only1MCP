@@ -253,6 +253,12 @@ pub struct MetricsExporter {
     registry: Arc<Registry>,
 }
 
+impl Default for MetricsExporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsExporter {
     /// Create new metrics exporter
     pub fn new() -> Self {
@@ -281,8 +287,10 @@ pub enum PrometheusError {
 }
 
 /// HTTP handler for /metrics endpoint
-pub async fn metrics_handler(State(exporter): State<Arc<MetricsExporter>>) -> impl IntoResponse {
-    match exporter.export() {
+pub async fn metrics_handler(
+    State(state): State<crate::proxy::server::AppState>,
+) -> impl IntoResponse {
+    match state.metrics.exporter.export() {
         Ok(metrics) => (
             StatusCode::OK,
             [("Content-Type", "text/plain; version=0.0.4")],

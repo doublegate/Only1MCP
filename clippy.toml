@@ -27,9 +27,6 @@ enum-variant-size-threshold = 200
 # Large error threshold (in bytes)
 large-error-threshold = 128
 
-# Maximum allowed cyclomatic complexity
-cyclomatic-complexity-threshold = 25
-
 # Whether to allow expect() in tests
 allow-expect-in-tests = true
 

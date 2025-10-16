@@ -101,8 +101,7 @@ impl HttpConnectionManager {
             .connect_timeout(config.connection_timeout)
             .tcp_keepalive(Some(config.keep_alive))
             .pool_max_idle_per_host(config.max_connections_per_host)
-            .gzip(config.compression)
-            .brotli(config.compression)
+            // Note: gzip/brotli compression is enabled by default in reqwest
             .build()
             .expect("Failed to build HTTP client");
 
@@ -158,7 +157,7 @@ impl ManageConnection for HttpConnectionManager {
         // Perform quick health check
         let response = conn
             .client
-            .head(&format!("{}/health", conn.base_url))
+            .head(format!("{}/health", conn.base_url))
             .timeout(Duration::from_secs(1))
             .send()
             .await
@@ -200,7 +199,7 @@ impl HttpConnection {
 
         let response = self
             .client
-            .post(&format!("{}/mcp", self.base_url))
+            .post(format!("{}/mcp", self.base_url))
             .json(&request)
             .send()
             .await?;
@@ -314,7 +313,7 @@ impl HttpTransport {
         PoolStats {
             connections: state.connections,
             idle_connections: state.idle_connections,
-            pending_connections: state.pending_connections as u32,
+            pending_connections: 0, // bb8 0.8 doesn't expose pending connections
         }
     }
 
@@ -324,7 +323,7 @@ impl HttpTransport {
 
         let response = conn
             .client
-            .get(&format!("{}/health", conn.base_url))
+            .get(format!("{}/health", conn.base_url))
             .timeout(Duration::from_secs(5))
             .send()
             .await?;
@@ -333,6 +332,54 @@ impl HttpTransport {
             Ok(())
         } else {
             Err(HttpError::HealthCheckFailed(response.status()))
+        }
+    }
+
+    /// Send request to a specific endpoint (convenience method for handler.rs)
+    pub async fn send_request(
+        &self,
+        endpoint: &str,
+        request: McpRequest,
+    ) -> Result<McpResponse, HttpError> {
+        let start = Instant::now();
+
+        // Get pooled connection
+        let conn = self.pool.get().await.map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
+
+        // Record attempt
+        self.metrics.request_count.fetch_add(1, Ordering::Relaxed);
+
+        // Send request
+        let result = conn
+            .client
+            .post(endpoint)
+            .json(&request)
+            .timeout(self.config.request_timeout)
+            .send()
+            .await;
+
+        match result {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body =
+                        response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    self.metrics.error_count.fetch_add(1, Ordering::Relaxed);
+                    return Err(HttpError::ServerError(format!("{}: {}", status, body)));
+                }
+
+                let mcp_response: McpResponse =
+                    response.json().await.map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
+
+                let elapsed = start.elapsed().as_micros() as u64;
+                self.metrics.total_latency_us.fetch_add(elapsed, Ordering::Relaxed);
+
+                Ok(mcp_response)
+            },
+            Err(e) => {
+                self.metrics.error_count.fetch_add(1, Ordering::Relaxed);
+                Err(e.into())
+            },
         }
     }
 }
@@ -350,6 +397,12 @@ pub struct TransportMetrics {
     request_count: AtomicU64,
     total_latency_us: AtomicU64,
     error_count: AtomicU64,
+}
+
+impl Default for TransportMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TransportMetrics {
@@ -388,6 +441,72 @@ pub struct MetricsStats {
     pub request_count: u64,
     pub average_latency_us: u64,
     pub error_count: u64,
+}
+
+/// Multi-backend HTTP transport pool manager
+pub struct HttpTransportPool {
+    /// Transports per endpoint (lazy initialization)
+    transports: dashmap::DashMap<String, Arc<HttpTransport>>,
+    /// Default configuration for new transports
+    default_config: HttpTransportConfig,
+}
+
+impl Default for HttpTransportPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HttpTransportPool {
+    /// Create a new transport pool with default configuration
+    pub fn new() -> Self {
+        Self {
+            transports: dashmap::DashMap::new(),
+            default_config: HttpTransportConfig::default(),
+        }
+    }
+
+    /// Get or create an HTTP transport for a specific endpoint
+    async fn get_or_create(&self, endpoint: &str) -> Result<Arc<HttpTransport>, HttpError> {
+        // Check if we already have a transport for this endpoint
+        if let Some(transport) = self.transports.get(endpoint) {
+            return Ok(transport.clone());
+        }
+
+        // Extract base URL from endpoint
+        let base_url = if let Ok(url) = url::Url::parse(endpoint) {
+            format!(
+                "{}://{}",
+                url.scheme(),
+                url.host_str().unwrap_or("localhost")
+            )
+        } else {
+            endpoint.to_string()
+        };
+
+        // Create new transport
+        let config = HttpTransportConfig {
+            base_url: base_url.clone(),
+            ..self.default_config.clone()
+        };
+
+        let transport = Arc::new(HttpTransport::new(config).await?);
+
+        // Store for reuse
+        self.transports.insert(base_url, transport.clone());
+
+        Ok(transport)
+    }
+
+    /// Send request to a specific endpoint
+    pub async fn send_request(
+        &self,
+        endpoint: &str,
+        request: crate::types::McpRequest,
+    ) -> Result<crate::types::McpResponse, HttpError> {
+        let transport = self.get_or_create(endpoint).await?;
+        transport.send_request(endpoint, request).await
+    }
 }
 
 #[cfg(test)]

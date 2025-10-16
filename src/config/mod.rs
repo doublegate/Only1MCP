@@ -11,6 +11,7 @@ pub mod schema;
 pub mod validation;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct Config {
     #[serde(default)]
     pub server: ServerConfig,
@@ -58,6 +59,8 @@ pub struct McpServerConfig {
     pub health_check: HealthCheckConfig,
     #[serde(default)]
     pub routing: RoutingConfig,
+    #[serde(default = "default_weight")]
+    pub weight: u32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -100,12 +103,34 @@ pub struct RoutingConfig {
     pub weight: u32,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RoutingAlgorithmConfig {
+    #[serde(default = "default_algorithm")]
+    pub algorithm: String,
+    #[serde(default = "default_virtual_nodes")]
+    pub virtual_nodes: usize,
+    #[serde(default)]
+    pub sticky_sessions: bool,
+}
+
+impl Default for RoutingAlgorithmConfig {
+    fn default() -> Self {
+        Self {
+            algorithm: default_algorithm(),
+            virtual_nodes: default_virtual_nodes(),
+            sticky_sessions: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct ProxyConfig {
     #[serde(default)]
     pub load_balancer: LoadBalancerConfig,
     #[serde(default)]
     pub connection_pool: ConnectionPoolConfig,
+    #[serde(default)]
+    pub routing: RoutingAlgorithmConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -342,15 +367,3 @@ impl Config {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            servers: Vec::new(),
-            proxy: ProxyConfig::default(),
-            context_optimization: ContextOptimizationConfig::default(),
-            auth: AuthConfig::default(),
-            observability: ObservabilityConfig::default(),
-        }
-    }
-}

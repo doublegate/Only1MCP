@@ -43,12 +43,12 @@ Only1MCP is a high-performance proxy and aggregator for Model Context Protocol (
           │
           ├─────────────┬──────────────┬──────────────┐
           ▼             ▼              ▼              ▼
-   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-   │  STDIO   │  │   HTTP   │  │   SSE    │  │WebSocket │
-   │Transport │  │Transport │  │Transport │  │Transport │
-   └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
-        │             │              │              │
-        ▼             ▼              ▼              ▼
+   ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐
+   │   STDIO   │  │   HTTP    │  │    SSE    │  │ WebSocket │
+   │ Transport │  │ Transport │  │ Transport │  │ Transport │
+   └────┬──────┘  └────┬──────┘  └─────┬─────┘  └─────┬─────┘
+        │              │               │              │
+        ▼              ▼               ▼              ▼
    ┌─────────────────────────────────────────────────────┐
    │               MCP Backend Servers                   │
    │  (Filesystem, GitHub, Database, Browser, etc.)      │

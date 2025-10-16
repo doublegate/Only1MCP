@@ -16,20 +16,116 @@
 //! 6. Cache successful responses
 
 use crate::cache::ResponseCache;
-use crate::config::RoutingConfig;
-use crate::error::{Error, Result};
-use crate::health::checker::HealthState;
+use crate::config::RoutingAlgorithmConfig;
+use crate::error::Error;
 use crate::health::circuit_breaker::CircuitBreaker;
+use crate::routing::load_balancer::ConsistentHashRing;
 use crate::types::{McpRequest, ServerId};
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
-use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 use xxhash_rust::xxh3::Xxh3;
+
+/// Routing algorithms available for load balancing
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoutingAlgorithm {
+    /// Consistent hashing with virtual nodes for session affinity
+    ConsistentHash,
+    /// Least connections (Power of Two Choices)
+    LeastConnections,
+    /// Round-robin distribution
+    RoundRobin,
+    /// Random selection
+    Random,
+    /// Weighted random based on server weights
+    WeightedRandom,
+}
+
+impl RoutingAlgorithm {
+    /// Parse routing algorithm from string
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "consistent_hash" | "consistent-hash" => Self::ConsistentHash,
+            "least_connections" | "least-connections" => Self::LeastConnections,
+            "round_robin" | "round-robin" => Self::RoundRobin,
+            "random" => Self::Random,
+            "weighted_random" | "weighted-random" => Self::WeightedRandom,
+            _ => Self::RoundRobin, // Default fallback
+        }
+    }
+}
+
+/// Health state tracker for routing decisions
+#[derive(Debug, Clone)]
+pub struct HealthState {
+    healthy: bool,
+    success_count: u64,
+    failure_count: u64,
+    latencies: Vec<Duration>,
+    last_check: Option<Instant>,
+}
+
+impl Default for HealthState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HealthState {
+    pub fn new() -> Self {
+        Self {
+            healthy: true,
+            success_count: 0,
+            failure_count: 0,
+            latencies: Vec::with_capacity(10),
+            last_check: None,
+        }
+    }
+
+    pub fn record_success(&mut self, latency: Duration) {
+        self.healthy = true;
+        self.success_count += 1;
+
+        // Keep last 10 latencies
+        if self.latencies.len() >= 10 {
+            self.latencies.remove(0);
+        }
+        self.latencies.push(latency);
+
+        self.last_check = Some(Instant::now());
+    }
+
+    pub fn record_failure(&mut self) {
+        self.failure_count += 1;
+
+        // Mark unhealthy if failure ratio is high
+        let total = self.success_count + self.failure_count;
+        if total > 0 {
+            let failure_rate = self.failure_count as f64 / total as f64;
+            if failure_rate > 0.5 {
+                self.healthy = false;
+            }
+        }
+
+        self.last_check = Some(Instant::now());
+    }
+
+    pub fn average_latency(&self) -> Duration {
+        if self.latencies.is_empty() {
+            return Duration::ZERO;
+        }
+        let sum: Duration = self.latencies.iter().sum();
+        sum / self.latencies.len() as u32
+    }
+
+    pub fn is_healthy(&self) -> bool {
+        self.healthy
+    }
+}
 
 /// Main request router responsible for backend selection and load balancing.
 pub struct RequestRouter {
@@ -40,7 +136,7 @@ pub struct RequestRouter {
     /// Per-server connection counts
     connection_counts: Arc<DashMap<ServerId, AtomicUsize>>,
     /// Routing configuration
-    config: RoutingConfig,
+    config: RoutingAlgorithmConfig,
     /// Circuit breakers per backend
     circuit_breakers: Arc<DashMap<ServerId, CircuitBreaker>>,
 }
@@ -58,12 +154,21 @@ pub enum RoutingError {
 
     #[error("No server selected")]
     NoServerSelected,
+
+    #[error("Registry error: {0}")]
+    Registry(String),
+}
+
+impl From<Error> for RoutingError {
+    fn from(err: Error) -> Self {
+        RoutingError::Registry(err.to_string())
+    }
 }
 
 impl RequestRouter {
     /// Create a new request router with the given configuration.
-    pub fn new(config: RoutingConfig) -> Self {
-        let hash_ring = ConsistentHashRing::new(config.virtual_nodes);
+    pub fn new(config: RoutingAlgorithmConfig) -> Self {
+        let hash_ring = ConsistentHashRing::new(config.virtual_nodes as u32);
 
         Self {
             hash_ring: Arc::new(ArcSwap::new(Arc::new(hash_ring))),
@@ -93,7 +198,7 @@ impl RequestRouter {
         registry: &ServerRegistry,
         cache: &ResponseCache,
     ) -> std::result::Result<(ServerId, Duration), RoutingError> {
-        let method = request.method();
+        let _method = request.method();
         let tool_name = extract_tool_name(request)?;
 
         // Step 1: Check cache for memoized response
@@ -133,7 +238,8 @@ impl RequestRouter {
         }
 
         // Step 4: Apply routing algorithm
-        let selected_server = match self.config.algorithm {
+        let algorithm = RoutingAlgorithm::from_str(&self.config.algorithm);
+        let selected_server = match algorithm {
             RoutingAlgorithm::ConsistentHash => {
                 self.route_consistent_hash(&tool_name, &healthy_servers)
             },
@@ -180,7 +286,7 @@ impl RequestRouter {
 
         // Find the server in the ring
         let server =
-            hash_ring.get_server(hash, servers).ok_or_else(|| RoutingError::HashRingEmpty)?;
+            hash_ring.get_server(hash, servers).ok_or(RoutingError::HashRingEmpty)?;
 
         debug!("Consistent hash selected: {} for key: {}", server, key);
         Ok(server.clone())
@@ -190,7 +296,10 @@ impl RequestRouter {
     ///
     /// Randomly selects two servers and routes to the one with fewer
     /// active connections. O(1) complexity with near-optimal distribution.
-    fn route_least_connections(&self, servers: &[ServerId]) -> std::result::Result<ServerId, RoutingError> {
+    fn route_least_connections(
+        &self,
+        servers: &[ServerId],
+    ) -> std::result::Result<ServerId, RoutingError> {
         use rand::seq::SliceRandom;
 
         if servers.len() == 1 {
@@ -217,7 +326,10 @@ impl RequestRouter {
     }
 
     /// Simple round-robin routing for fairness.
-    fn route_round_robin(&self, servers: &[ServerId]) -> std::result::Result<ServerId, RoutingError> {
+    fn route_round_robin(
+        &self,
+        servers: &[ServerId],
+    ) -> std::result::Result<ServerId, RoutingError> {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
         let index = COUNTER.fetch_add(1, Ordering::Relaxed) % servers.len();
@@ -269,21 +381,21 @@ impl RequestRouter {
         let mut health = self
             .health_states
             .entry(server_id.clone())
-            .or_insert_with(|| HealthState::new());
+            .or_default();
 
         if success {
             health.record_success(latency);
 
             // Update circuit breaker
-            if let Some(mut cb) = self.circuit_breakers.get_mut(server_id) {
-                cb.record_success();
+            if let Some(cb) = self.circuit_breakers.get_mut(server_id) {
+                cb.record_success().await;
             }
         } else {
             health.record_failure();
 
             // Update circuit breaker
-            if let Some(mut cb) = self.circuit_breakers.get_mut(server_id) {
-                cb.record_failure();
+            if let Some(cb) = self.circuit_breakers.get_mut(server_id) {
+                cb.record_failure().await;
             }
         }
     }
@@ -309,7 +421,10 @@ impl RequestRouter {
 
         // Initialize health state and circuit breaker
         self.health_states.insert(server_id.clone(), HealthState::new());
-        self.circuit_breakers.insert(server_id.clone(), CircuitBreaker::new());
+        self.circuit_breakers.insert(
+            server_id.clone(),
+            CircuitBreaker::new(server_id.clone(), Default::default()),
+        );
 
         info!("Added server {} to router", server_id);
     }
@@ -329,54 +444,7 @@ impl RequestRouter {
     }
 }
 
-/// Consistent hash ring with virtual nodes for better distribution.
-#[derive(Clone)]
-pub struct ConsistentHashRing {
-    /// Virtual nodes in the ring (server_id, virtual_node_id) -> hash
-    ring: BTreeMap<u64, (ServerId, u32)>,
-    /// Number of virtual nodes per physical server
-    virtual_nodes: u32,
-}
-
-impl ConsistentHashRing {
-    /// Create a new hash ring with the specified virtual node count.
-    pub fn new(virtual_nodes: u32) -> Self {
-        Self {
-            ring: BTreeMap::new(),
-            virtual_nodes,
-        }
-    }
-
-    /// Add a server to the hash ring.
-    pub fn add_server(&mut self, server_id: &ServerId) {
-        for vnode in 0..self.virtual_nodes {
-            let key = format!("{}:{}", server_id, vnode);
-            let hash = xxhash_rust::xxh3::xxh3_64(key.as_bytes());
-            self.ring.insert(hash, (server_id.clone(), vnode));
-        }
-
-        debug!(
-            "Added {} to hash ring with {} virtual nodes",
-            server_id, self.virtual_nodes
-        );
-    }
-
-    /// Remove a server from the hash ring.
-    pub fn remove_server(&mut self, server_id: &ServerId) {
-        self.ring.retain(|_, (id, _)| id != server_id);
-        debug!("Removed {} from hash ring", server_id);
-    }
-
-    /// Find the server responsible for a given hash.
-    pub fn get_server(&self, hash: u64, eligible_servers: &[ServerId]) -> Option<&ServerId> {
-        // Find the first node with hash >= input hash
-        let start_iter = self.ring.range(hash..).map(|(_, (id, _))| id);
-        let wrap_iter = self.ring.iter().map(|(_, (id, _))| id);
-
-        // Check servers in order starting from hash position
-        start_iter.chain(wrap_iter).find(|&id| eligible_servers.contains(id))
-    }
-}
+// ConsistentHashRing is now imported from crate::routing::load_balancer
 
 // Helper functions
 
@@ -387,24 +455,61 @@ fn extract_tool_name(request: &McpRequest) -> std::result::Result<String, Routin
         .ok_or_else(|| RoutingError::NoBackendAvailable("unknown".to_string()))
 }
 
-/// Routing algorithms available for backend selection.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RoutingAlgorithm {
-    ConsistentHash,
-    LeastConnections,
-    RoundRobin,
-    Random,
-    WeightedRandom,
-}
-
 /// Server registry for tracking available backends.
 pub struct ServerRegistry {
     servers: DashMap<ServerId, ServerInfo>,
 }
 
+impl Default for ServerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServerRegistry {
+    /// Create new empty server registry
+    pub fn new() -> Self {
+        Self {
+            servers: DashMap::new(),
+        }
+    }
+
+    /// Create server registry from config
+    pub async fn from_config(config: &crate::config::Config) -> std::result::Result<Self, Error> {
+        let registry = Self::new();
+
+        // Populate registry from config servers
+        for server in &config.servers {
+            if server.enabled {
+                let info = ServerInfo {
+                    id: server.id.clone(),
+                    weight: server.weight,
+                    tools: Vec::new(), // Would be discovered from server capabilities
+                };
+                registry.servers.insert(server.id.clone(), info);
+            }
+        }
+
+        Ok(registry)
+    }
+
+    /// Get list of healthy server IDs
+    pub async fn get_healthy_servers(&self) -> Vec<String> {
+        self.servers.iter().map(|entry| entry.key().clone()).collect()
+    }
+
+    /// Get server configuration by ID
+    pub fn get_server(&self, _server_id: &str) -> Option<crate::proxy::registry::ServerConfig> {
+        // This is a stub - in a real implementation, we'd fetch from the actual registry
+        // For now, return None as the ServerInfo doesn't have full ServerConfig
+        None
+    }
+
     /// Find servers that support a specific tool.
-    pub async fn find_servers_for_tool(&self, tool: &str) -> std::result::Result<Vec<ServerId>, Error> {
+    pub async fn find_servers_for_tool(
+        &self,
+        tool: &str,
+    ) -> std::result::Result<Vec<ServerId>, Error> {
         let servers: Vec<ServerId> = self
             .servers
             .iter()
@@ -418,6 +523,16 @@ impl ServerRegistry {
     /// Get the weight of a server for weighted routing.
     pub async fn get_server_weight(&self, server_id: &ServerId) -> u32 {
         self.servers.get(server_id).map(|info| info.weight).unwrap_or(1)
+    }
+
+    /// Get the number of registered servers
+    pub fn len(&self) -> usize {
+        self.servers.len()
+    }
+
+    /// Check if the registry is empty
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty()
     }
 }
 

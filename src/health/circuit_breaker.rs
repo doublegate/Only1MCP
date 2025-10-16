@@ -4,7 +4,7 @@
 use serde::Deserialize;
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing;
 
@@ -95,7 +95,7 @@ impl CircuitBreaker {
             failure_count: Arc::new(AtomicU32::new(0)),
             success_count: Arc::new(AtomicU32::new(0)),
             last_state_change: Arc::new(AtomicI64::new(
-                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+                SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64,
             )),
             config,
             listeners: Arc::new(RwLock::new(Vec::new())),
@@ -109,11 +109,11 @@ impl CircuitBreaker {
         match *state {
             CircuitState::Closed => true,
             CircuitState::Open => {
-                // Check if timeout expired
+                // Check if timeout expired (use milliseconds for precision)
                 let last_change = self.last_state_change.load(Ordering::Relaxed);
-                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
 
-                if now - last_change > self.config.timeout.as_secs() as i64 {
+                if now - last_change > self.config.timeout.as_millis() as i64 {
                     // Transition to half-open
                     drop(state);
                     self.transition_to_half_open().await;
@@ -145,7 +145,6 @@ impl CircuitBreaker {
                 let count = self.success_count.fetch_add(1, Ordering::Relaxed) + 1;
 
                 if count >= self.config.success_threshold {
-                    drop(state);
                     self.transition_to_closed().await;
                 }
             },
@@ -165,13 +164,11 @@ impl CircuitBreaker {
                 let count = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
 
                 if count >= self.config.failure_threshold {
-                    drop(state);
                     self.transition_to_open().await;
                 }
             },
             CircuitState::HalfOpen => {
                 // Single failure in half-open returns to open
-                drop(state);
                 self.transition_to_open().await;
             },
             CircuitState::Open => {
@@ -184,6 +181,16 @@ impl CircuitBreaker {
     /// Get current state
     pub async fn current_state(&self) -> CircuitState {
         self.state.read().await.clone()
+    }
+
+    /// Check if circuit breaker is open (non-blocking check via state inspection)
+    pub fn is_open(&self) -> bool {
+        // Try to get state without blocking, default to false (allow) if locked
+        if let Ok(state) = self.state.try_read() {
+            matches!(*state, CircuitState::Open)
+        } else {
+            false // If we can't read state, assume closed to avoid blocking
+        }
     }
 
     /// Add state change listener
@@ -242,10 +249,10 @@ impl CircuitBreaker {
         self.notify_listeners(CircuitState::Closed).await;
     }
 
-    /// Update timestamp
+    /// Update timestamp (in milliseconds for precision)
     fn update_timestamp(&self) {
         self.last_state_change.store(
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64,
             Ordering::Relaxed,
         );
     }
@@ -289,9 +296,23 @@ pub struct CircuitBreakerManager {
     default_config: CircuitBreakerConfig,
 }
 
+impl Default for CircuitBreakerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CircuitBreakerManager {
-    /// Create new circuit breaker manager
-    pub fn new(default_config: CircuitBreakerConfig) -> Self {
+    /// Create new circuit breaker manager with default config
+    pub fn new() -> Self {
+        Self {
+            breakers: Arc::new(dashmap::DashMap::new()),
+            default_config: CircuitBreakerConfig::default(),
+        }
+    }
+
+    /// Create new circuit breaker manager with custom config
+    pub fn with_config(default_config: CircuitBreakerConfig) -> Self {
         Self {
             breakers: Arc::new(dashmap::DashMap::new()),
             default_config,
@@ -355,6 +376,12 @@ impl CircuitBreakerManager {
             entry.value().transition_to_closed().await;
         }
     }
+
+    /// Manually trip a circuit breaker
+    pub async fn trip(&self, backend_id: &str) {
+        let breaker = self.get_or_create(backend_id);
+        breaker.transition_to_open().await;
+    }
 }
 
 #[cfg(test)]
@@ -400,7 +427,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_manager() {
-        let manager = CircuitBreakerManager::new(CircuitBreakerConfig::default());
+        let manager = CircuitBreakerManager::with_config(CircuitBreakerConfig::default());
 
         // Initially all backends available
         assert!(manager.is_available("backend1").await);

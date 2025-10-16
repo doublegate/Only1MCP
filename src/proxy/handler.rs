@@ -4,18 +4,16 @@
 //! and WebSocket upgrades for the MCP protocol.
 
 use crate::error::{Error, ProxyError, Result};
-use crate::proxy::router::{RequestRouter, ServerRegistry};
+use crate::proxy::router::RequestRouter;
 use crate::proxy::server::AppState;
-use crate::types::{McpRequest, McpResponse, Tool};
+use crate::types::{McpRequest, McpResponse, Prompt, Resource, Tool};
 use axum::{
     extract::{ws::WebSocketUpgrade, State},
     response::Response,
     Json,
 };
 use serde_json::{json, Value};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Handle generic JSON-RPC requests.
@@ -48,13 +46,16 @@ pub async fn handle_jsonrpc_request(
 }
 
 /// Handle tools/list request with aggregation.
-async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
+async fn handle_tools_list_impl(
+    state: AppState,
+    request: McpRequest,
+) -> std::result::Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Check cache
     let cache_key = format!("tools:list:{}", state.config.server.port);
     if let Some(cached) = state.cache.get(&cache_key).await {
-        state.metrics.cache_hits.inc();
+        state.metrics.cache_hits().inc();
         debug!("Cache hit for tools/list");
         return Ok(serde_json::from_slice(&cached.data)?);
     }
@@ -80,6 +81,9 @@ async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> std::re
 
     // Wait for all responses
     let results = futures::future::join_all(tasks).await;
+
+    // Store count before consuming results
+    let server_count = results.len();
 
     // Aggregate tools
     let mut all_tools = Vec::new();
@@ -112,11 +116,11 @@ async fn handle_tools_list_impl(state: AppState, request: McpRequest) -> std::re
         })
         .await;
 
-    state.metrics.tools_list_duration.record(start.elapsed().as_secs_f64());
+    state.metrics.tools_list_duration().record(start.elapsed().as_secs_f64());
     info!(
         "Aggregated {} tools from {} servers",
         all_tools.len(),
-        results.len()
+        server_count
     );
     Ok(response)
 }
@@ -130,7 +134,10 @@ pub async fn handle_tools_call(
     handle_tools_call_impl(state, request).await.map(Json)
 }
 
-async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
+async fn handle_tools_call_impl(
+    state: AppState,
+    request: McpRequest,
+) -> std::result::Result<Value, ProxyError> {
     let start = Instant::now();
 
     // Extract tool name
@@ -138,6 +145,7 @@ async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> std::re
         .params()
         .get("name")
         .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing tool name".into()))?;
 
     debug!("Calling tool: {}", tool_name);
@@ -161,7 +169,7 @@ async fn handle_tools_call_impl(state: AppState, request: McpRequest) -> std::re
     )
     .await?;
 
-    state.metrics.tools_call_duration.record(start.elapsed().as_secs_f64());
+    state.metrics.tools_call_duration().record(start.elapsed().as_secs_f64());
     info!("Tool {} executed in {:?}", tool_name, start.elapsed());
     Ok(response)
 }
@@ -212,7 +220,7 @@ async fn handle_resources_list_impl(
         }
     });
 
-    state.metrics.resources_list_duration.record(start.elapsed().as_secs_f64());
+    state.metrics.resources_list_duration().record(start.elapsed().as_secs_f64());
     Ok(response)
 }
 
@@ -233,6 +241,7 @@ async fn handle_resources_read_impl(
         .params()
         .get("uri")
         .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing resource URI".into()))?;
 
     debug!("Reading resource: {}", uri);
@@ -243,10 +252,13 @@ async fn handle_resources_read_impl(
         .route_request(&request, &*state.registry.read().await, &state.cache)
         .await?;
 
-    let registry = state.registry.read().await;
-    let server = registry
-        .get_server(&server_id)
-        .ok_or_else(|| ProxyError::NoBackendAvailable(uri.to_string()))?;
+    let server = {
+        let registry = state.registry.read().await;
+        registry
+            .get_server(&server_id)
+            .ok_or_else(|| ProxyError::NoBackendAvailable(uri.to_string()))?
+            .clone()
+    };
 
     send_request_to_backend(state, server, request).await
 }
@@ -261,7 +273,7 @@ pub async fn handle_resources_subscribe(
 }
 
 async fn handle_resources_subscribe_impl(
-    state: AppState,
+    _state: AppState,
     request: McpRequest,
 ) -> std::result::Result<Value, ProxyError> {
     // For subscriptions, we need to establish a persistent connection
@@ -270,6 +282,7 @@ async fn handle_resources_subscribe_impl(
         .params()
         .get("uri")
         .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing resource URI".into()))?;
 
     info!("Subscribing to resource updates: {}", uri);
@@ -346,6 +359,7 @@ async fn handle_prompts_get_impl(
         .params()
         .get("name")
         .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
         .ok_or_else(|| ProxyError::InvalidRequest("Missing prompt name".into()))?;
 
     debug!("Getting prompt: {}", name);
@@ -356,10 +370,13 @@ async fn handle_prompts_get_impl(
         .route_request(&request, &*state.registry.read().await, &state.cache)
         .await?;
 
-    let registry = state.registry.read().await;
-    let server = registry
-        .get_server(&server_id)
-        .ok_or_else(|| ProxyError::NoBackendAvailable(name.to_string()))?;
+    let server = {
+        let registry = state.registry.read().await;
+        registry
+            .get_server(&server_id)
+            .ok_or_else(|| ProxyError::NoBackendAvailable(name.to_string()))?
+            .clone()
+    };
 
     send_request_to_backend(state, server, request).await
 }
@@ -383,10 +400,13 @@ async fn handle_sampling_create_impl(
         .route_request(&request, &*state.registry.read().await, &state.cache)
         .await?;
 
-    let registry = state.registry.read().await;
-    let server = registry
-        .get_server(&server_id)
-        .ok_or_else(|| ProxyError::NoBackendAvailable("sampling".to_string()))?;
+    let server = {
+        let registry = state.registry.read().await;
+        registry
+            .get_server(&server_id)
+            .ok_or_else(|| ProxyError::NoBackendAvailable("sampling".to_string()))?
+            .clone()
+    };
 
     send_request_to_backend(state, server, request).await
 }
@@ -399,28 +419,36 @@ pub async fn handle_websocket_upgrade(
     ws.on_upgrade(|socket| handle_websocket(socket, state))
 }
 
-async fn handle_websocket(socket: axum::extract::ws::WebSocket, state: AppState) {
+async fn handle_websocket(_socket: axum::extract::ws::WebSocket, _state: AppState) {
     // TODO: Implement WebSocket handling for bidirectional streaming
     info!("WebSocket connection established");
 }
 
 /// Handle Server-Sent Events stream.
-pub async fn handle_sse_stream(State(state): State<AppState>) -> std::result::Result<Response, ProxyError> {
+pub async fn handle_sse_stream(
+    State(_state): State<AppState>,
+) -> std::result::Result<Response, ProxyError> {
     // TODO: Implement SSE for server push
     Ok(Response::new("SSE endpoint".into()))
 }
 
 /// Route generic/unknown requests to appropriate backend.
-async fn route_generic_request(state: AppState, request: McpRequest) -> std::result::Result<Value, ProxyError> {
+async fn route_generic_request(
+    state: AppState,
+    request: McpRequest,
+) -> std::result::Result<Value, ProxyError> {
     let router = RequestRouter::new(state.config.proxy.routing.clone());
     let (server_id, _) = router
         .route_request(&request, &*state.registry.read().await, &state.cache)
         .await?;
 
-    let registry = state.registry.read().await;
-    let server = registry
-        .get_server(&server_id)
-        .ok_or_else(|| ProxyError::NoBackendAvailable(request.method()))?;
+    let server = {
+        let registry = state.registry.read().await;
+        registry
+            .get_server(&server_id)
+            .ok_or_else(|| ProxyError::NoBackendAvailable(request.method()))?
+            .clone()
+    };
 
     send_request_to_backend(state, server, request).await
 }
@@ -432,8 +460,71 @@ async fn fetch_tools_from_server(
     server_id: String,
     request: McpRequest,
 ) -> Result<Vec<Tool>> {
-    // TODO: Implement actual fetching logic
-    Ok(Vec::new())
+    // Get server config from the config (not registry, as registry only has ServerInfo)
+    let server_config = state
+        .config
+        .servers
+        .iter()
+        .find(|s| s.id == server_id)
+        .ok_or_else(|| Error::ServerNotFound(server_id.clone()))?;
+
+    // Create tools/list JSON-RPC request
+    let tools_request = McpRequest::new("tools/list", serde_json::json!({}), request.id());
+
+    // Send via appropriate transport
+    let response = match &server_config.transport {
+        crate::config::TransportConfig::Http { url, .. } => {
+            let http_transport = state
+                .http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
+
+            http_transport
+                .send_request(url, tools_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Stdio { command, args, env } => {
+            let stdio_transport = state
+                .stdio_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("STDIO transport not initialized".into()))?;
+
+            // Create STDIO config
+            let stdio_config = crate::transport::stdio::StdioConfig {
+                command: command.clone(),
+                args: args.clone(),
+                env: env.clone(),
+                cwd: None,
+                timeout_ms: 30000,
+                max_memory_mb: Some(512),
+                max_cpu_percent: Some(50),
+                sandbox: true,
+            };
+
+            stdio_transport
+                .send_request_with_config(server_id.clone(), &stdio_config, tools_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Sse { .. } => {
+            return Err(Error::Transport("SSE not yet implemented".into()));
+        },
+    };
+
+    // Parse response and extract tools array
+    let result = response
+        .result()
+        .ok_or_else(|| Error::Server("No result in tools/list response".into()))?;
+
+    let tools_value = result
+        .get("tools")
+        .ok_or_else(|| Error::Server("No tools field in response".into()))?;
+
+    let tools: Vec<Tool> = serde_json::from_value(tools_value.clone())
+        .map_err(|e| Error::Serialization(format!("Failed to parse tools: {}", e)))?;
+
+    Ok(tools)
 }
 
 async fn fetch_resources_from_server(
@@ -441,8 +532,70 @@ async fn fetch_resources_from_server(
     server_id: String,
     request: McpRequest,
 ) -> Result<Vec<Resource>> {
-    // TODO: Implement actual fetching logic
-    Ok(Vec::new())
+    // Get server config
+    let server_config = state
+        .config
+        .servers
+        .iter()
+        .find(|s| s.id == server_id)
+        .ok_or_else(|| Error::ServerNotFound(server_id.clone()))?;
+
+    // Create resources/list JSON-RPC request
+    let resources_request = McpRequest::new("resources/list", serde_json::json!({}), request.id());
+
+    // Send via appropriate transport
+    let response = match &server_config.transport {
+        crate::config::TransportConfig::Http { url, .. } => {
+            let http_transport = state
+                .http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
+
+            http_transport
+                .send_request(url, resources_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Stdio { command, args, env } => {
+            let stdio_transport = state
+                .stdio_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("STDIO transport not initialized".into()))?;
+
+            let stdio_config = crate::transport::stdio::StdioConfig {
+                command: command.clone(),
+                args: args.clone(),
+                env: env.clone(),
+                cwd: None,
+                timeout_ms: 30000,
+                max_memory_mb: Some(512),
+                max_cpu_percent: Some(50),
+                sandbox: true,
+            };
+
+            stdio_transport
+                .send_request_with_config(server_id.clone(), &stdio_config, resources_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Sse { .. } => {
+            return Err(Error::Transport("SSE not yet implemented".into()));
+        },
+    };
+
+    // Parse response and extract resources array
+    let result = response
+        .result()
+        .ok_or_else(|| Error::Server("No result in resources/list response".into()))?;
+
+    let resources_value = result
+        .get("resources")
+        .ok_or_else(|| Error::Server("No resources field in response".into()))?;
+
+    let resources: Vec<Resource> = serde_json::from_value(resources_value.clone())
+        .map_err(|e| Error::Serialization(format!("Failed to parse resources: {}", e)))?;
+
+    Ok(resources)
 }
 
 async fn fetch_prompts_from_server(
@@ -450,24 +603,128 @@ async fn fetch_prompts_from_server(
     server_id: String,
     request: McpRequest,
 ) -> Result<Vec<Prompt>> {
-    // TODO: Implement actual fetching logic
-    Ok(Vec::new())
+    // Get server config
+    let server_config = state
+        .config
+        .servers
+        .iter()
+        .find(|s| s.id == server_id)
+        .ok_or_else(|| Error::ServerNotFound(server_id.clone()))?;
+
+    // Create prompts/list JSON-RPC request
+    let prompts_request = McpRequest::new("prompts/list", serde_json::json!({}), request.id());
+
+    // Send via appropriate transport
+    let response = match &server_config.transport {
+        crate::config::TransportConfig::Http { url, .. } => {
+            let http_transport = state
+                .http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
+
+            http_transport
+                .send_request(url, prompts_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Stdio { command, args, env } => {
+            let stdio_transport = state
+                .stdio_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("STDIO transport not initialized".into()))?;
+
+            let stdio_config = crate::transport::stdio::StdioConfig {
+                command: command.clone(),
+                args: args.clone(),
+                env: env.clone(),
+                cwd: None,
+                timeout_ms: 30000,
+                max_memory_mb: Some(512),
+                max_cpu_percent: Some(50),
+                sandbox: true,
+            };
+
+            stdio_transport
+                .send_request_with_config(server_id.clone(), &stdio_config, prompts_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::Sse { .. } => {
+            return Err(Error::Transport("SSE not yet implemented".into()));
+        },
+    };
+
+    // Parse response and extract prompts array
+    let result = response
+        .result()
+        .ok_or_else(|| Error::Server("No result in prompts/list response".into()))?;
+
+    let prompts_value = result
+        .get("prompts")
+        .ok_or_else(|| Error::Server("No prompts field in response".into()))?;
+
+    let prompts: Vec<Prompt> = serde_json::from_value(prompts_value.clone())
+        .map_err(|e| Error::Serialization(format!("Failed to parse prompts: {}", e)))?;
+
+    Ok(prompts)
 }
 
 async fn send_request_to_backend(
     state: AppState,
-    server: ServerConfig,
+    server: crate::proxy::registry::ServerConfig,
     request: McpRequest,
 ) -> std::result::Result<Value, ProxyError> {
-    // TODO: Implement actual backend communication
-    Ok(json!({
-        "jsonrpc": "2.0",
-        "id": request.id(),
-        "result": {}
-    }))
+    use crate::proxy::registry::TransportType;
+
+    let start = Instant::now();
+
+    // Route based on transport type
+    let response = match server.transport {
+        TransportType::Http => {
+            let http_transport = state
+                .http_transport
+                .as_ref()
+                .ok_or_else(|| ProxyError::Transport("HTTP transport not available".into()))?;
+            http_transport
+                .send_request(&server.endpoint, request)
+                .await
+                .map_err(|e| ProxyError::Transport(e.to_string()))?
+        },
+        TransportType::Stdio => {
+            let stdio_transport = state
+                .stdio_transport
+                .as_ref()
+                .ok_or_else(|| ProxyError::Transport("STDIO transport not available".into()))?;
+            stdio_transport
+                .send_request(&server.id, request)
+                .await
+                .map_err(|e| ProxyError::Transport(e.to_string()))?
+        },
+        TransportType::WebSocket => {
+            return Err(ProxyError::Transport(
+                "WebSocket not yet implemented".into(),
+            ));
+        },
+        TransportType::Sse => {
+            return Err(ProxyError::Transport("SSE not yet implemented".into()));
+        },
+    };
+
+    // Record metrics
+    let duration = start.elapsed();
+    info!(
+        "Backend request to {} completed in {:?}",
+        server.id, duration
+    );
+
+    // Convert response to JSON Value
+    Ok(serde_json::to_value(response)?)
 }
 
-async fn execute_with_retry<F, Fut>(f: F, max_retries: u32) -> std::result::Result<Value, ProxyError>
+async fn execute_with_retry<F, Fut>(
+    f: F,
+    max_retries: u32,
+) -> std::result::Result<Value, ProxyError>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = std::result::Result<Value, ProxyError>>,
@@ -486,37 +743,5 @@ where
     }
 }
 
-// Type definitions for resources and prompts
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct Resource {
-    uri: String,
-    name: String,
-    description: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct Prompt {
-    name: String,
-    description: Option<String>,
-    arguments: Vec<PromptArgument>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct PromptArgument {
-    name: String,
-    description: Option<String>,
-    required: bool,
-}
-
-#[derive(Debug, Clone)]
-struct ServerConfig {
-    id: String,
-    transport: TransportType,
-}
-
-#[derive(Debug, Clone)]
-enum TransportType {
-    Stdio,
-    Http,
-    WebSocket,
-}
+// Type definitions now imported from crate::types
+// ServerConfig and TransportType are now imported from crate::proxy::registry

@@ -43,6 +43,9 @@ pub enum Error {
     #[error("Circuit breaker open for server: {0}")]
     CircuitBreakerOpen(String),
 
+    #[error("Server error: {0}")]
+    Server(String),
+
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
@@ -57,6 +60,15 @@ pub enum Error {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    #[error("Deserialization error: {0}")]
+    Deserialization(String),
+
+    #[error("Timeout: {0}")]
+    Timeout(String),
 }
 
 impl Error {
@@ -95,6 +107,9 @@ pub enum ProxyError {
     #[error("Timeout: {0}")]
     Timeout(String),
 
+    #[error("Transport error: {0}")]
+    Transport(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 
@@ -102,7 +117,13 @@ pub enum ProxyError {
     Json(#[from] serde_json::Error),
 
     #[error("Core error: {0}")]
-    Core(#[from] Error),
+    Core(Error),
+
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    #[error("Deserialization error: {0}")]
+    Deserialization(String),
 }
 
 impl ProxyError {
@@ -118,8 +139,11 @@ impl IntoResponse for ProxyError {
             ProxyError::NoBackendAvailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
             ProxyError::BackendError(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
             ProxyError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, msg.clone()),
+            ProxyError::Transport(msg) => (StatusCode::BAD_GATEWAY, msg.clone()),
             ProxyError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
             ProxyError::Json(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+            ProxyError::Serialization(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            ProxyError::Deserialization(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             ProxyError::Core(err) => (
                 StatusCode::from_u16(err.status_code())
                     .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
@@ -137,5 +161,34 @@ impl IntoResponse for ProxyError {
         }));
 
         (status, body).into_response()
+    }
+}
+
+// From trait implementations for error conversions
+impl From<crate::proxy::router::RoutingError> for ProxyError {
+    fn from(err: crate::proxy::router::RoutingError) -> Self {
+        match err {
+            crate::proxy::router::RoutingError::NoBackendAvailable(msg) => {
+                ProxyError::NoBackendAvailable(msg)
+            },
+            crate::proxy::router::RoutingError::AllBackendsUnhealthy(msg) => {
+                ProxyError::NoBackendAvailable(format!("All backends unhealthy: {}", msg))
+            },
+            crate::proxy::router::RoutingError::HashRingEmpty => {
+                ProxyError::Internal("Hash ring empty".to_string())
+            },
+            crate::proxy::router::RoutingError::NoServerSelected => {
+                ProxyError::Internal("No server selected".to_string())
+            },
+            crate::proxy::router::RoutingError::Registry(msg) => {
+                ProxyError::Internal(format!("Registry error: {}", msg))
+            },
+        }
+    }
+}
+
+impl From<Error> for ProxyError {
+    fn from(err: Error) -> Self {
+        ProxyError::Core(err)
     }
 }
