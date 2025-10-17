@@ -131,6 +131,30 @@ servers:
 - Memory overhead: **~2KB per config** (Arc<Config> clones are cheap)
 - No impact on request path performance
 
+**Active Health Checking**
+- Timer-based health probes with configurable intervals (5-300 seconds)
+- HTTP health checks (GET /health with timeout, expects 200 OK)
+- STDIO health checks (process alive verification with command validation)
+- Threshold-based health state transitions:
+  - healthy_threshold: Consecutive successes to mark healthy (default: 2)
+  - unhealthy_threshold: Consecutive failures to mark unhealthy (default: 3)
+  - Prevents flapping from transient failures
+- Circuit breaker integration (automatic failover on unhealthy state)
+- Prometheus metrics:
+  - HEALTH_CHECK_TOTAL: Counter with labels (server_id, result: success/failure)
+  - HEALTH_CHECK_DURATION_SECONDS: Histogram with label (server_id)
+  - SERVER_HEALTH_STATUS: Gauge 0/1 with label (server_id)
+- Comprehensive tests (7 test cases):
+  - HTTP health check success/failure scenarios
+  - STDIO health check process validation
+  - Threshold-based state transitions
+  - Circuit breaker integration
+  - Metrics recording verification
+  - Concurrent health checks
+  - Edge case handling (timeouts, invalid responses)
+- Integration with ProxyServer (automatic startup with server)
+- Configurable per-backend (can disable for specific servers)
+
 ## [0.1.0-dev] - 2025-10-16
 
 ### 🎉 Phase 1 MVP Complete - Production-Ready Foundation

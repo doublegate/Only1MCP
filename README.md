@@ -194,6 +194,41 @@ Modify the config, save, and within 500ms the proxy will:
 curl http://localhost:8080/api/v1/admin/metrics | grep config_reload
 ```
 
+### Active Health Checking
+
+Only1MCP continuously monitors backend server health with configurable probes:
+
+```yaml
+servers:
+  - id: backend-1
+    url: "http://localhost:9001"
+    health_check:
+      enabled: true
+      interval_seconds: 10      # Check every 10 seconds
+      timeout_seconds: 5        # 5 second timeout
+      path: "/health"           # Health endpoint path
+      healthy_threshold: 2      # 2 successes = healthy
+      unhealthy_threshold: 3    # 3 failures = unhealthy
+```
+
+**Health Check Types**:
+- **HTTP**: GET request to /health endpoint (expects 200 OK)
+- **STDIO**: Process alive verification
+
+**Health States**:
+- **Healthy** (green): Server receives traffic
+- **Unhealthy** (red): Server removed from rotation
+- **Recovering** (yellow): Testing if server is healthy again
+
+**Automatic Failover**:
+Unhealthy servers are automatically removed from the load balancer rotation
+and re-added once they pass the healthy threshold.
+
+**Metrics** (Prometheus):
+- `health_check_total` - Total checks (labels: server_id, result)
+- `health_check_duration_seconds` - Check duration histogram
+- `server_health_status` - Current health status (0=unhealthy, 1=healthy)
+
 ---
 
 ## 📊 Project Status
