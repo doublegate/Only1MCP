@@ -151,6 +151,32 @@ lazy_static! {
         &["client_id", "limit_type"]
     ).unwrap();
 
+    // Health check metrics
+    pub static ref HEALTH_CHECK_TOTAL: CounterVec = register_counter_vec!(
+        opts!(
+            "only1mcp_health_check_total",
+            "Total number of health checks performed"
+        ),
+        &["server_id", "result"]  // result: success, failure
+    ).unwrap();
+
+    pub static ref HEALTH_CHECK_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
+        histogram_opts!(
+            "only1mcp_health_check_duration_seconds",
+            "Health check duration in seconds",
+            vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
+        ),
+        &["server_id"]
+    ).unwrap();
+
+    pub static ref SERVER_HEALTH_STATUS: GaugeVec = register_gauge_vec!(
+        opts!(
+            "only1mcp_server_health_status",
+            "Server health status (0=unhealthy, 1=healthy)"
+        ),
+        &["server_id"]
+    ).unwrap();
+
     // Registry for all metrics
     pub static ref REGISTRY: Registry = {
         let registry = Registry::new();
@@ -169,6 +195,9 @@ lazy_static! {
         registry.register(Box::new(CIRCUIT_BREAKER_FAILURES.clone())).unwrap();
         registry.register(Box::new(RATE_LIMIT_EXCEEDED.clone())).unwrap();
         registry.register(Box::new(RATE_LIMIT_REMAINING.clone())).unwrap();
+        registry.register(Box::new(HEALTH_CHECK_TOTAL.clone())).unwrap();
+        registry.register(Box::new(HEALTH_CHECK_DURATION_SECONDS.clone())).unwrap();
+        registry.register(Box::new(SERVER_HEALTH_STATUS.clone())).unwrap();
         registry
     };
 }

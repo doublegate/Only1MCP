@@ -95,13 +95,23 @@ impl HealthState {
     }
 }
 
+/// Transport type for health checking
+#[derive(Debug, Clone)]
+pub enum HealthCheckTransport {
+    Http { endpoint: String },
+    Stdio { command: String, args: Vec<String> },
+}
+
 /// Individual backend health checker
 pub struct HealthChecker {
     /// Backend identifier
     backend_id: String,
 
-    /// Health check endpoint
-    endpoint: String,
+    /// Transport configuration
+    transport: HealthCheckTransport,
+
+    /// Health check path (for HTTP)
+    health_path: String,
 
     /// Check interval
     interval: Duration,
@@ -121,24 +131,65 @@ pub struct HealthChecker {
     /// HTTP client for checks
     http_client: reqwest::Client,
 
+    /// Circuit breaker integration (optional)
+    circuit_breaker: Option<Arc<crate::health::circuit_breaker::CircuitBreakerManager>>,
+
     /// Shutdown signal
     shutdown: Arc<AtomicBool>,
 }
 
 impl HealthChecker {
-    /// Create a new health checker
-    pub fn new(backend_id: String, endpoint: String, config: HealthCheckConfig) -> Self {
+    /// Create a new health checker from config module's HealthCheckConfig
+    pub fn from_config(
+        backend_id: String,
+        transport: HealthCheckTransport,
+        config: crate::config::HealthCheckConfig,
+    ) -> Self {
         Self {
             backend_id,
-            endpoint,
+            transport,
+            health_path: config.path,
+            interval: Duration::from_secs(config.interval_seconds),
+            timeout: Duration::from_secs(config.timeout_seconds),
+            failure_threshold: config.unhealthy_threshold,
+            success_threshold: config.healthy_threshold,
+            status: Arc::new(RwLock::new(HealthStatus::new())),
+            http_client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(config.timeout_seconds))
+                .build()
+                .unwrap(),
+            circuit_breaker: None,
+            shutdown: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Create a new health checker (legacy method using local HealthCheckConfig)
+    pub fn new(backend_id: String, transport: HealthCheckTransport, config: HealthCheckConfig) -> Self {
+        Self {
+            backend_id,
+            transport,
+            health_path: "/health".to_string(), // Default path
             interval: config.interval,
             timeout: config.timeout,
             failure_threshold: config.failure_threshold,
             success_threshold: config.success_threshold,
             status: Arc::new(RwLock::new(HealthStatus::new())),
-            http_client: reqwest::Client::builder().timeout(config.timeout).build().unwrap(),
+            http_client: reqwest::Client::builder()
+                .timeout(config.timeout)
+                .build()
+                .unwrap(),
+            circuit_breaker: None,
             shutdown: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Set circuit breaker for integration
+    pub fn with_circuit_breaker(
+        mut self,
+        circuit_breaker: Arc<crate::health::circuit_breaker::CircuitBreakerManager>,
+    ) -> Self {
+        self.circuit_breaker = Some(circuit_breaker);
+        self
     }
 
     /// Start continuous health checking
@@ -161,11 +212,30 @@ impl HealthChecker {
     async fn perform_check(&self) -> HealthCheckResult {
         let start = Instant::now();
 
-        // Build health check request
-        let request = if self.endpoint.contains("/mcp/health") {
-            // MCP-specific health check
+        match &self.transport {
+            HealthCheckTransport::Http { endpoint } => {
+                self.perform_http_check(endpoint, start).await
+            }
+            HealthCheckTransport::Stdio { command, args } => {
+                self.perform_stdio_check(command, args, start).await
+            }
+        }
+    }
+
+    /// Perform HTTP health check
+    async fn perform_http_check(&self, endpoint: &str, start: Instant) -> HealthCheckResult {
+        // Build health endpoint URL
+        let health_url = if endpoint.ends_with('/') {
+            format!("{}{}", endpoint, self.health_path.trim_start_matches('/'))
+        } else {
+            format!("{}{}", endpoint, self.health_path)
+        };
+
+        // Determine if MCP-specific health check or generic HTTP
+        let request = if health_url.contains("/mcp/health") || health_url.contains("/health") {
+            // Try MCP-specific JSON-RPC health check first
             self.http_client
-                .post(&self.endpoint)
+                .post(&health_url)
                 .json(&serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -174,8 +244,8 @@ impl HealthChecker {
                 }))
                 .timeout(self.timeout)
         } else {
-            // Generic HTTP health check
-            self.http_client.get(&self.endpoint).timeout(self.timeout)
+            // Generic HTTP GET health check
+            self.http_client.get(&health_url).timeout(self.timeout)
         };
 
         match request.send().await {
@@ -201,7 +271,7 @@ impl HealthChecker {
                         _latency: Some(latency),
                     }
                 }
-            },
+            }
             Err(e) => {
                 let latency = start.elapsed();
 
@@ -215,16 +285,77 @@ impl HealthChecker {
                     },
                     _latency: Some(latency),
                 }
+            }
+        }
+    }
+
+    /// Perform STDIO process health check
+    async fn perform_stdio_check(
+        &self,
+        command: &str,
+        args: &[String],
+        start: Instant,
+    ) -> HealthCheckResult {
+        use tokio::process::Command;
+
+        // Check if command exists using 'which' crate
+        if which::which(command).is_err() {
+            return HealthCheckResult::Failure {
+                reason: format!("Command '{}' not found in PATH", command),
+                _latency: Some(start.elapsed()),
+            };
+        }
+
+        // Try to execute a simple test command (e.g., --version or --help)
+        // This validates that the process can be spawned
+        let test_result = tokio::time::timeout(
+            self.timeout,
+            Command::new(command).args(args).arg("--version").output(),
+        )
+        .await;
+
+        match test_result {
+            Ok(Ok(output)) => {
+                let latency = start.elapsed();
+
+                if output.status.success() {
+                    HealthCheckResult::Success {
+                        latency,
+                        details: None,
+                    }
+                } else {
+                    // Process exists but returned non-zero exit code
+                    // This is still considered "alive" for STDIO processes
+                    HealthCheckResult::Success {
+                        latency,
+                        details: None,
+                    }
+                }
+            }
+            Ok(Err(e)) => HealthCheckResult::Failure {
+                reason: format!("Failed to spawn process: {}", e),
+                _latency: Some(start.elapsed()),
+            },
+            Err(_) => HealthCheckResult::Failure {
+                reason: format!("Process health check timed out after {:?}", self.timeout),
+                _latency: Some(start.elapsed()),
             },
         }
     }
 
     /// Update health status based on check result
     async fn update_status(&self, result: HealthCheckResult) {
+        use crate::metrics::HEALTH_CHECK_TOTAL;
+
         let mut status = self.status.write().await;
 
         match result {
             HealthCheckResult::Success { latency, details } => {
+                // Record successful check
+                HEALTH_CHECK_TOTAL
+                    .with_label_values(&[&self.backend_id, "success"])
+                    .inc();
+
                 status.last_success = Instant::now();
                 status.success_count += 1;
                 status.failure_count = 0;
@@ -242,14 +373,30 @@ impl HealthChecker {
                 }
 
                 // Determine state based on thresholds
+                let previous_state = status.state.clone();
                 if status.success_count >= self.success_threshold {
                     if status.state != HealthState::Healthy {
                         info!("Backend {} is now healthy", self.backend_id);
+                        status.state = HealthState::Healthy;
                     }
-                    status.state = HealthState::Healthy;
+                }
+
+                // Notify circuit breaker of successful check
+                if let Some(cb) = &self.circuit_breaker {
+                    cb.record_outcome(&self.backend_id, true).await;
+
+                    // Reset circuit breaker when transitioning to healthy
+                    if previous_state != HealthState::Healthy && status.state == HealthState::Healthy {
+                        cb.reset(&self.backend_id).await;
+                    }
                 }
             },
             HealthCheckResult::Failure { reason, _latency: _ } => {
+                // Record failed check
+                HEALTH_CHECK_TOTAL
+                    .with_label_values(&[&self.backend_id, "failure"])
+                    .inc();
+
                 status.last_failure = Some(Instant::now());
                 status.failure_count += 1;
                 status.success_count = 0;
@@ -261,13 +408,29 @@ impl HealthChecker {
                 warn!("Health check failed for {}: {}", self.backend_id, reason);
 
                 // Determine state based on thresholds
+                let previous_state = status.state.clone();
                 if status.failure_count >= self.failure_threshold {
                     if status.state != HealthState::Unhealthy {
                         error!("Backend {} is now unhealthy", self.backend_id);
+                        status.state = HealthState::Unhealthy;
+
+                        // Notify circuit breaker to open (block traffic)
+                        if let Some(cb) = &self.circuit_breaker {
+                            cb.trip(&self.backend_id).await;
+                        }
                     }
-                    status.state = HealthState::Unhealthy;
                 } else if status.failure_count > 0 {
                     status.state = HealthState::Degraded;
+                }
+
+                // Record failure with circuit breaker
+                if let Some(cb) = &self.circuit_breaker {
+                    cb.record_outcome(&self.backend_id, false).await;
+
+                    // Trip circuit breaker when transitioning to unhealthy
+                    if previous_state != HealthState::Unhealthy && status.state == HealthState::Unhealthy {
+                        cb.trip(&self.backend_id).await;
+                    }
                 }
             },
         }
@@ -278,6 +441,19 @@ impl HealthChecker {
 
     /// Emit health metrics
     fn emit_metrics(&self, status: &HealthStatus) {
+        use crate::metrics::{HEALTH_CHECK_DURATION_SECONDS, SERVER_HEALTH_STATUS};
+
+        // Record health status gauge (0 = unhealthy, 1 = healthy)
+        let health_value = if status.state.is_healthy() { 1.0 } else { 0.0 };
+        SERVER_HEALTH_STATUS
+            .with_label_values(&[&self.backend_id])
+            .set(health_value);
+
+        // Record latency
+        HEALTH_CHECK_DURATION_SECONDS
+            .with_label_values(&[&self.backend_id])
+            .observe(status.avg_latency / 1000.0); // Convert ms to seconds
+
         debug!(
             "Health status for {}: {:?} (error_rate: {:.2}%, latency: {:.2}ms)",
             self.backend_id,

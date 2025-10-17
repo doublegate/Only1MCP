@@ -93,6 +93,12 @@ pub struct HealthCheckConfig {
     pub interval_seconds: u64,
     #[serde(default = "default_timeout_seconds")]
     pub timeout_seconds: u64,
+    #[serde(default = "default_healthy_threshold")]
+    pub healthy_threshold: u32,
+    #[serde(default = "default_unhealthy_threshold")]
+    pub unhealthy_threshold: u32,
+    #[serde(default = "default_health_path")]
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -215,6 +221,15 @@ fn default_interval_seconds() -> u64 {
 fn default_timeout_seconds() -> u64 {
     5
 }
+fn default_healthy_threshold() -> u32 {
+    2
+}
+fn default_unhealthy_threshold() -> u32 {
+    3
+}
+fn default_health_path() -> String {
+    "/health".to_string()
+}
 fn default_priority() -> u32 {
     100
 }
@@ -267,6 +282,9 @@ impl Default for HealthCheckConfig {
             enabled: true,
             interval_seconds: default_interval_seconds(),
             timeout_seconds: default_timeout_seconds(),
+            healthy_threshold: default_healthy_threshold(),
+            unhealthy_threshold: default_unhealthy_threshold(),
+            path: default_health_path(),
         }
     }
 }

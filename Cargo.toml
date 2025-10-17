@@ -122,6 +122,9 @@ url = "2.5"
 # System info
 sys-info = "0.9"
 
+# Command validation
+which = "6.0"
+
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

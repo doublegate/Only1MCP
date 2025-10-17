@@ -52,6 +52,9 @@ pub fn test_config_with_backends(port: u16, backend_urls: Vec<String>) -> Config
                 enabled: false, // Disable health checks for tests
                 interval_seconds: 30,
                 timeout_seconds: 5,
+                healthy_threshold: 2,
+                unhealthy_threshold: 3,
+                path: "/health".to_string(),
             },
             routing: RoutingConfig {
                 tools: vec!["*".to_string()], // Accept all tools
@@ -92,6 +95,9 @@ pub fn mock_server_config(id: &str, url: &str) -> McpServerConfig {
             enabled: false, // Disable for tests
             interval_seconds: 30,
             timeout_seconds: 5,
+            healthy_threshold: 2,
+            unhealthy_threshold: 3,
+            path: "/health".to_string(),
         },
         routing: RoutingConfig::default(),
         weight: 1,
