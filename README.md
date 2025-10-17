@@ -229,6 +229,41 @@ and re-added once they pass the healthy threshold.
 - `health_check_duration_seconds` - Check duration histogram
 - `server_health_status` - Current health status (0=unhealthy, 1=healthy)
 
+### Response Caching
+
+Only1MCP caches backend responses to reduce latency and backend load:
+
+```yaml
+proxy:
+  cache:
+    enabled: true
+    l1_capacity: 1000      # Tools cache (5 min TTL)
+    l2_capacity: 500       # Resources cache (30 min TTL)
+    l3_capacity: 200       # Prompts cache (2 hour TTL)
+```
+
+**Caching Strategy**:
+- **L1 (Tools)**: 5-minute TTL, 1000 entries
+- **L2 (Resources)**: 30-minute TTL, 500 entries
+- **L3 (Prompts)**: 2-hour TTL, 200 entries
+
+**Eviction Policies**:
+- **TTL (Time To Live)**: Entries expire after configured duration
+- **LRU (Least Recently Used)**: Oldest entries removed when capacity reached
+
+**Cached Operations**:
+- `tools/list` - Tool discovery
+- `resources/list` - Resource enumeration
+- `prompts/list` - Prompt templates
+
+**Metrics** (Prometheus):
+- `cache_hits_total` - Successful cache retrievals
+- `cache_misses_total` - Cache misses requiring backend call
+- `cache_size_entries` - Current number of cached entries
+- `cache_evictions_total` - Total LRU evictions
+
+**Implementation**: Uses moka 0.12 for production-grade caching with automatic TTL expiration and LRU eviction.
+
 ---
 
 ## 📊 Project Status

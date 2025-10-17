@@ -57,7 +57,7 @@ async fn handle_tools_list_impl(
     if let Some(cached) = state.cache.get(&cache_key).await {
         state.metrics.cache_hits().inc();
         debug!("Cache hit for tools/list");
-        return Ok(serde_json::from_slice(&cached.data)?);
+        return Ok(serde_json::from_slice(&cached)?);
     }
 
     // Get all healthy servers
@@ -109,12 +109,9 @@ async fn handle_tools_list_impl(
     });
 
     // Cache response (5 minute TTL)
-    let _ = state
-        .cache
-        .get_or_compute(&request, || async {
-            Ok(McpResponse::from_value(response.clone())?)
-        })
-        .await;
+    if let Ok(serialized) = serde_json::to_vec(&response) {
+        state.cache.set(cache_key, serialized, "tools/list").await;
+    }
 
     state.metrics.tools_list_duration().record(start.elapsed().as_secs_f64());
     info!(
@@ -193,7 +190,7 @@ async fn handle_resources_list_impl(
     // Check cache
     let cache_key = format!("resources:list:{}", state.config.server.port);
     if let Some(cached) = state.cache.get(&cache_key).await {
-        return Ok(serde_json::from_slice(&cached.data)?);
+        return Ok(serde_json::from_slice(&cached)?);
     }
 
     // Get all healthy servers and aggregate resources
@@ -316,7 +313,7 @@ async fn handle_prompts_list_impl(
     // Similar aggregation pattern as tools/list
     let cache_key = format!("prompts:list:{}", state.config.server.port);
     if let Some(cached) = state.cache.get(&cache_key).await {
-        return Ok(serde_json::from_slice(&cached.data)?);
+        return Ok(serde_json::from_slice(&cached)?);
     }
 
     let registry = state.registry.read().await;

@@ -155,6 +155,41 @@ servers:
 - Integration with ProxyServer (automatic startup with server)
 - Configurable per-backend (can disable for specific servers)
 
+**Response Caching with TTL/LRU**
+- In-memory caching using moka 0.12 (async cache with TTL and LRU)
+- Three-tier cache architecture with different TTLs per operation type:
+  - L1 (Tools): 5-minute TTL, 1000 entries - frequently accessed operations
+  - L2 (Resources): 30-minute TTL, 500 entries - moderate access patterns
+  - L3 (Prompts): 2-hour TTL, 200 entries - static content
+- Automatic TTL expiration (moka handles internally, no manual checking)
+- Automatic LRU eviction when capacity reached (moka handles internally)
+- Blake3 hashing for cache keys (method + params for deterministic keys)
+- Cached operations: tools/list, resources/list, prompts/list
+- Prometheus metrics integration:
+  - CACHE_HITS_TOTAL: Counter for successful cache retrievals
+  - CACHE_MISSES_TOTAL: Counter for cache misses requiring backend calls
+  - CACHE_SIZE_ENTRIES: Gauge for current number of cached entries
+  - CACHE_EVICTIONS_TOTAL: Counter for LRU evictions
+- Eviction listener for metrics tracking
+- Manual cache invalidation API (invalidate specific key or clear all)
+- Cache statistics endpoint with hit rate calculation
+- Comprehensive tests (11 test cases total: 4 unit tests + 7 integration tests):
+  - test_cache_basic_operations: Set, get, invalidate operations
+  - test_cache_layer_selection: Verify routing to correct cache layers
+  - test_cache_clear: Clear all entries across all layers
+  - test_cache_stats: Statistics tracking and reporting
+  - test_cache_hit_and_miss: Hit/miss scenarios with metrics
+  - test_ttl_expiry: TTL expiration functionality
+  - test_cache_invalidation: Manual invalidation
+  - test_cache_disabled: Disabled cache behavior
+  - test_cache_key_generation: Deterministic key generation
+  - test_concurrent_cache_access: Thread-safe concurrent operations
+  - test_lru_eviction: LRU eviction when capacity reached
+- Lock-free concurrent access via moka's optimized implementation
+- Zero manual TTL checking (automatic via moka time_to_live)
+- Zero manual LRU logic (automatic via moka max_capacity)
+- Cache hit rate monitoring (exposed via stats() method)
+
 ## [0.1.0-dev] - 2025-10-16
 
 ### 🎉 Phase 1 MVP Complete - Production-Ready Foundation

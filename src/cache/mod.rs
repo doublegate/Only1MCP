@@ -1,31 +1,36 @@
-//! Multi-layer caching system for context optimization.
+//! Response caching system with TTL and LRU eviction using moka.
 //!
 //! Implements a three-tier cache with different TTLs:
 //! - L1: Hot cache for frequently accessed tools (5 min TTL)
 //! - L2: Warm cache for resource listings (30 min TTL)
 //! - L3: Cold cache for static prompts (2 hour TTL)
+//!
+//! Uses the moka crate for production-grade caching with:
+//! - Automatic TTL expiration
+//! - Automatic LRU eviction when capacity is reached
+//! - Lock-free concurrent access
+//! - Async API compatible with Tokio
 
 use crate::error::{Error, Result};
 use crate::types::{McpRequest, McpResponse};
-use dashmap::DashMap;
+use moka::future::Cache;
 use serde::{Deserialize, Serialize};
-use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tracing::{debug, info};
+use std::time::Duration;
+use tracing::info;
 
 /// Multi-layer caching system with different TTLs per operation type.
-/// Implements LRU eviction with size limits and TTL expiration.
+/// Implements automatic TTL expiration and LRU eviction using moka.
 pub struct LayeredCache {
     /// L1: Hot cache for frequently accessed tools (5 min TTL)
-    l1_tools: Arc<DashMap<CacheKey, CachedResponse>>,
+    l1_tools: Arc<Cache<String, Vec<u8>>>,
 
     /// L2: Warm cache for resource listings (30 min TTL)
-    l2_resources: Arc<DashMap<CacheKey, CachedResponse>>,
+    l2_resources: Arc<Cache<String, Vec<u8>>>,
 
     /// L3: Cold cache for static prompts (2 hour TTL)
-    l3_prompts: Arc<DashMap<CacheKey, CachedResponse>>,
+    l3_prompts: Arc<Cache<String, Vec<u8>>>,
 
     /// Configuration for cache behavior
     config: CacheConfig,
@@ -37,166 +42,139 @@ pub struct LayeredCache {
 /// Alias for the main cache type used by the application
 pub type ResponseCache = LayeredCache;
 
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct CacheKey {
-    /// Blake3 hash of the request for fast comparison
-    request_hash: [u8; 32],
-
-    /// Optional namespace for multi-tenant scenarios
-    namespace: Option<String>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct CachedResponse {
-    /// The actual cached response data
-    pub data: Vec<u8>,
-
-    /// When this entry was created (skipped for serialization, initialized on deserialization)
-    #[serde(skip, default = "Instant::now")]
-    pub created_at: Instant,
-
-    /// How many times this entry has been accessed
-    pub hit_count: u32,
-
-    /// Size in bytes for memory management
-    pub size_bytes: usize,
-
-    /// Optional ETag for conditional requests
-    pub etag: Option<String>,
-
-    /// Server ID that provided this response
-    pub server_id: String,
-}
-
 impl LayeredCache {
-    /// Create a new multi-layer cache with optimized settings.
-    pub fn new(max_entries: usize, max_size_bytes: usize) -> Self {
-        let config = CacheConfig {
-            l1_capacity: max_entries / 2,
-            l2_capacity: max_entries / 3,
-            l3_capacity: max_entries / 6,
-            max_cache_bytes: max_size_bytes,
-            ..Default::default()
-        };
+    /// Create a new multi-layer cache with moka-based TTL and LRU.
+    pub fn new(config: CacheConfig) -> Self {
+        // Create L1 cache (tools) with 5-minute TTL
+        let l1_tools = Cache::builder()
+            .max_capacity(config.l1_capacity)
+            .time_to_live(config.l1_ttl)
+            .eviction_listener(|_key, _value: Vec<u8>, _cause| {
+                crate::metrics::CACHE_EVICTIONS_TOTAL.inc();
+            })
+            .build();
+
+        // Create L2 cache (resources) with 30-minute TTL
+        let l2_resources = Cache::builder()
+            .max_capacity(config.l2_capacity)
+            .time_to_live(config.l2_ttl)
+            .eviction_listener(|_key, _value: Vec<u8>, _cause| {
+                crate::metrics::CACHE_EVICTIONS_TOTAL.inc();
+            })
+            .build();
+
+        // Create L3 cache (prompts) with 2-hour TTL
+        let l3_prompts = Cache::builder()
+            .max_capacity(config.l3_capacity)
+            .time_to_live(config.l3_ttl)
+            .eviction_listener(|_key, _value: Vec<u8>, _cause| {
+                crate::metrics::CACHE_EVICTIONS_TOTAL.inc();
+            })
+            .build();
 
         Self {
-            l1_tools: Arc::new(DashMap::with_capacity(config.l1_capacity)),
-            l2_resources: Arc::new(DashMap::with_capacity(config.l2_capacity)),
-            l3_prompts: Arc::new(DashMap::with_capacity(config.l3_capacity)),
+            l1_tools: Arc::new(l1_tools),
+            l2_resources: Arc::new(l2_resources),
+            l3_prompts: Arc::new(l3_prompts),
             config,
             metrics: Arc::new(CacheMetrics::default()),
         }
     }
 
-    /// Get a cached response if available and fresh.
-    pub async fn get(&self, key: &str) -> Option<CachedResponse> {
-        let cache_key = self.compute_cache_key_from_string(key);
+    /// Get a cached response if available (moka handles TTL automatically).
+    pub async fn get(&self, key: &str) -> Option<Vec<u8>> {
+        if !self.config.enabled {
+            return None;
+        }
 
         // Try all cache layers in order
         for cache in [&self.l1_tools, &self.l2_resources, &self.l3_prompts] {
-            if let Some(entry) = cache.get(&cache_key) {
-                if self.is_fresh_by_duration(&entry, Duration::from_secs(300)) {
-                    self.metrics.hits.fetch_add(1, Ordering::Relaxed);
-                    return Some(entry.clone());
-                }
-                // Stale entry - remove it
-                cache.remove(&cache_key);
+            if let Some(value) = cache.get(key).await {
+                self.metrics.hits.fetch_add(1, Ordering::Relaxed);
+                crate::metrics::CACHE_HITS_TOTAL.inc();
+                crate::metrics::CACHE_SIZE_ENTRIES.set(self.total_size() as i64);
+                return Some(value);
             }
         }
 
         self.metrics.misses.fetch_add(1, Ordering::Relaxed);
+        crate::metrics::CACHE_MISSES_TOTAL.inc();
         None
     }
 
-    /// Get or compute a response with cache-aside pattern.
-    /// Returns cached value if fresh, otherwise computes and stores.
-    pub async fn get_or_compute<F, Fut>(
-        &self,
-        request: &McpRequest,
-        compute: F,
-    ) -> Result<McpResponse>
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = Result<McpResponse>>,
-    {
-        // Generate cache key from request
-        let key = self.compute_cache_key(request);
-
-        // Determine which cache layer based on request type
-        let cache = self.select_cache_layer(&request.method());
-
-        // Check for cached response
-        if let Some(entry) = cache.get(&key) {
-            if self.is_fresh(&entry, &request.method()) {
-                self.metrics.hits.fetch_add(1, Ordering::Relaxed);
-                debug!("Cache hit for {}", request.method());
-                return self.deserialize_response(&entry.data);
-            }
-            // Stale entry - remove it
-            cache.remove(&key);
+    /// Store response in cache (moka handles eviction automatically).
+    pub async fn set(&self, key: String, value: Vec<u8>, method: &str) {
+        if !self.config.enabled {
+            return;
         }
 
-        // Cache miss - compute the response
-        self.metrics.misses.fetch_add(1, Ordering::Relaxed);
-        debug!("Cache miss for {}", request.method());
-        let response = compute().await?;
+        // Select cache layer based on method
+        let cache = self.select_cache_layer(method);
+        cache.insert(key, value).await;
 
-        // Store in cache if cacheable
-        if self.is_cacheable(request, &response) {
-            let serialized = self.serialize_response(&response)?;
-            let entry = CachedResponse {
-                data: serialized.clone(),
-                created_at: Instant::now(),
-                hit_count: 0,
-                size_bytes: serialized.len(),
-                etag: self.generate_etag(&serialized),
-                server_id: String::new(), // Set by caller if needed
-            };
+        self.metrics.inserts.fetch_add(1, Ordering::Relaxed);
+        crate::metrics::CACHE_SIZE_ENTRIES.set(self.total_size() as i64);
+    }
 
-            // Check cache size limits before inserting
-            self.maybe_evict(cache.clone(), entry.size_bytes).await;
-            cache.insert(key, entry);
-            self.metrics.inserts.fetch_add(1, Ordering::Relaxed);
+    /// Run pending maintenance tasks to ensure immediate visibility (for testing).
+    #[cfg(test)]
+    pub async fn sync(&self) {
+        self.l1_tools.run_pending_tasks().await;
+        self.l2_resources.run_pending_tasks().await;
+        self.l3_prompts.run_pending_tasks().await;
+    }
+
+    /// Invalidate specific key from all layers.
+    pub async fn invalidate(&self, key: &str) {
+        self.l1_tools.invalidate(key).await;
+        self.l2_resources.invalidate(key).await;
+        self.l3_prompts.invalidate(key).await;
+        crate::metrics::CACHE_SIZE_ENTRIES.set(self.total_size() as i64);
+    }
+
+    /// Clear all cache entries across all layers.
+    pub async fn clear(&self) {
+        self.l1_tools.invalidate_all();
+        self.l2_resources.invalidate_all();
+        self.l3_prompts.invalidate_all();
+
+        // Run pending tasks to ensure invalidation completes
+        self.l1_tools.run_pending_tasks().await;
+        self.l2_resources.run_pending_tasks().await;
+        self.l3_prompts.run_pending_tasks().await;
+
+        self.metrics.clears.fetch_add(1, Ordering::Relaxed);
+        crate::metrics::CACHE_SIZE_ENTRIES.set(0);
+        info!("Cache cleared");
+    }
+
+    /// Get cache statistics.
+    pub async fn stats(&self) -> CacheStats {
+        CacheStats {
+            l1_entries: self.l1_tools.entry_count(),
+            l2_entries: self.l2_resources.entry_count(),
+            l3_entries: self.l3_prompts.entry_count(),
+            total_hits: self.metrics.hits.load(Ordering::Relaxed),
+            total_misses: self.metrics.misses.load(Ordering::Relaxed),
+            total_evictions: self.metrics.evictions.load(Ordering::Relaxed),
+            hit_rate: self.metrics.hit_rate(),
         }
-
-        Ok(response)
     }
 
     /// Compute a deterministic cache key using Blake3.
-    /// Ensures consistent hashing across restarts.
-    fn compute_cache_key(&self, request: &McpRequest) -> CacheKey {
+    pub fn cache_key(method: &str, params: &serde_json::Value) -> String {
         use blake3::Hasher;
         let mut hasher = Hasher::new();
 
-        // Hash the normalized request (sorted keys, trimmed strings)
-        let normalized = format!("{}:{}", request.method(), request.params_hash());
-        hasher.update(normalized.as_bytes());
+        // Hash the method and params
+        let key_data = format!("{}{}", method, params);
+        hasher.update(key_data.as_bytes());
 
-        // Add namespace if multi-tenant
-        if let Some(ns) = &self.config.namespace {
-            hasher.update(ns.as_bytes());
-        }
-
-        CacheKey {
-            request_hash: hasher.finalize().into(),
-            namespace: self.config.namespace.clone(),
-        }
-    }
-
-    /// Compute cache key from a simple string.
-    fn compute_cache_key_from_string(&self, key: &str) -> CacheKey {
-        use blake3::Hasher;
-        let mut hasher = Hasher::new();
-        hasher.update(key.as_bytes());
-
-        CacheKey {
-            request_hash: hasher.finalize().into(),
-            namespace: self.config.namespace.clone(),
-        }
+        hasher.finalize().to_hex().to_string()
     }
 
     /// Intelligent cache layer selection based on request type.
-    fn select_cache_layer(&self, method: &str) -> Arc<DashMap<CacheKey, CachedResponse>> {
+    fn select_cache_layer(&self, method: &str) -> Arc<Cache<String, Vec<u8>>> {
         match method {
             // Tool operations are frequently accessed, short TTL
             "tools/list" | "tools/call" => self.l1_tools.clone(),
@@ -212,59 +190,13 @@ impl LayeredCache {
         }
     }
 
-    /// Check if a cached entry is still fresh based on TTL.
-    fn is_fresh(&self, entry: &CachedResponse, method: &str) -> bool {
-        let age = entry.created_at.elapsed();
-        let ttl = match method {
-            "tools/list" => self.config.l1_ttl,
-            "resources/list" => self.config.l2_ttl,
-            "prompts/list" => self.config.l3_ttl,
-            _ => Duration::from_secs(300), // 5 min default
-        };
-        age < ttl
+    /// Get total cache size across all layers.
+    fn total_size(&self) -> u64 {
+        self.l1_tools.entry_count() + self.l2_resources.entry_count() + self.l3_prompts.entry_count()
     }
 
-    /// Check if entry is fresh based on a specific duration.
-    fn is_fresh_by_duration(&self, entry: &CachedResponse, ttl: Duration) -> bool {
-        entry.created_at.elapsed() < ttl
-    }
-
-    /// LRU eviction when cache approaches size limits.
-    /// Removes least recently used entries until under threshold.
-    async fn maybe_evict(
-        &self,
-        cache: Arc<DashMap<CacheKey, CachedResponse>>,
-        needed_bytes: usize,
-    ) {
-        let current_size: usize = cache.iter().map(|entry| entry.value().size_bytes).sum();
-
-        if current_size + needed_bytes > self.config.max_cache_bytes {
-            // Find least recently used entries
-            let mut entries: Vec<_> = cache
-                .iter()
-                .map(|entry| (entry.key().clone(), entry.value().created_at))
-                .collect();
-
-            entries.sort_by_key(|e| e.1);
-
-            // Remove oldest entries until we have space
-            let mut freed = 0;
-            for (key, _) in entries {
-                if freed >= needed_bytes {
-                    break;
-                }
-                if let Some((_, removed)) = cache.remove(&key) {
-                    freed += removed.size_bytes;
-                    self.metrics.evictions.fetch_add(1, Ordering::Relaxed);
-                }
-            }
-
-            info!("Evicted {} bytes from cache", freed);
-        }
-    }
-
-    /// Check if a request/response pair should be cached.
-    fn is_cacheable(&self, request: &McpRequest, _response: &McpResponse) -> bool {
+    /// Check if a request should be cached.
+    pub fn is_cacheable(&self, request: &McpRequest, _response: &McpResponse) -> bool {
         // Don't cache mutations or sensitive operations
         !matches!(
             request.method().as_str(),
@@ -273,71 +205,39 @@ impl LayeredCache {
     }
 
     /// Serialize response for storage.
-    fn serialize_response(&self, response: &McpResponse) -> Result<Vec<u8>> {
+    pub fn serialize_response(&self, response: &McpResponse) -> Result<Vec<u8>> {
         serde_json::to_vec(response).map_err(|e| Error::Serialization(e.to_string()))
     }
 
     /// Deserialize response from storage.
-    fn deserialize_response(&self, data: &[u8]) -> Result<McpResponse> {
+    pub fn deserialize_response(&self, data: &[u8]) -> Result<McpResponse> {
         serde_json::from_slice(data).map_err(|e| Error::Deserialization(e.to_string()))
-    }
-
-    /// Generate ETag for cache validation.
-    fn generate_etag(&self, data: &[u8]) -> Option<String> {
-        use blake3::Hasher;
-        let mut hasher = Hasher::new();
-        hasher.update(data);
-        Some(format!("\"{}\"", hasher.finalize().to_hex()))
-    }
-
-    /// Clear all cache layers.
-    pub fn clear(&self) {
-        self.l1_tools.clear();
-        self.l2_resources.clear();
-        self.l3_prompts.clear();
-        self.metrics.clears.fetch_add(1, Ordering::Relaxed);
-        info!("Cache cleared");
-    }
-
-    /// Get cache statistics.
-    pub fn stats(&self) -> CacheStats {
-        CacheStats {
-            l1_entries: self.l1_tools.len(),
-            l2_entries: self.l2_resources.len(),
-            l3_entries: self.l3_prompts.len(),
-            total_hits: self.metrics.hits.load(Ordering::Relaxed),
-            total_misses: self.metrics.misses.load(Ordering::Relaxed),
-            total_evictions: self.metrics.evictions.load(Ordering::Relaxed),
-            hit_rate: self.metrics.hit_rate(),
-        }
     }
 }
 
 /// Cache configuration with sensible defaults.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CacheConfig {
+    /// Whether caching is enabled
+    pub enabled: bool,
+
     /// L1 cache capacity (hot, tools)
-    pub l1_capacity: usize,
+    pub l1_capacity: u64,
     pub l1_ttl: Duration,
 
     /// L2 cache capacity (warm, resources)
-    pub l2_capacity: usize,
+    pub l2_capacity: u64,
     pub l2_ttl: Duration,
 
     /// L3 cache capacity (cold, prompts)
-    pub l3_capacity: usize,
+    pub l3_capacity: u64,
     pub l3_ttl: Duration,
-
-    /// Maximum total cache size in bytes
-    pub max_cache_bytes: usize,
-
-    /// Optional namespace for multi-tenant scenarios
-    pub namespace: Option<String>,
 }
 
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             l1_capacity: 1000,
             l1_ttl: Duration::from_secs(300), // 5 minutes
 
@@ -346,10 +246,6 @@ impl Default for CacheConfig {
 
             l3_capacity: 200,
             l3_ttl: Duration::from_secs(7200), // 2 hours
-
-            max_cache_bytes: 100 * 1024 * 1024, // 100 MB
-
-            namespace: None,
         }
     }
 }
@@ -382,11 +278,90 @@ impl CacheMetrics {
 /// Cache statistics for monitoring.
 #[derive(Debug, Serialize)]
 pub struct CacheStats {
-    pub l1_entries: usize,
-    pub l2_entries: usize,
-    pub l3_entries: usize,
+    pub l1_entries: u64,
+    pub l2_entries: u64,
+    pub l3_entries: u64,
     pub total_hits: u64,
     pub total_misses: u64,
     pub total_evictions: u64,
     pub hit_rate: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cache_basic_operations() {
+        let config = CacheConfig::default();
+        let cache = LayeredCache::new(config);
+
+        // Test set and get
+        let key = "test_key".to_string();
+        let value = vec![1, 2, 3, 4];
+        cache.set(key.clone(), value.clone(), "tools/list").await;
+
+        let retrieved = cache.get(&key).await;
+        assert_eq!(retrieved, Some(value));
+
+        // Test invalidate
+        cache.invalidate(&key).await;
+        let after_invalidate = cache.get(&key).await;
+        assert_eq!(after_invalidate, None);
+    }
+
+    #[tokio::test]
+    async fn test_cache_layer_selection() {
+        let config = CacheConfig::default();
+        let cache = LayeredCache::new(config);
+
+        // Tools should go to L1
+        cache.set("tools_key".to_string(), vec![1], "tools/list").await;
+        cache.sync().await;
+        assert_eq!(cache.l1_tools.entry_count(), 1);
+
+        // Resources should go to L2
+        cache.set("resources_key".to_string(), vec![2], "resources/list").await;
+        cache.sync().await;
+        assert_eq!(cache.l2_resources.entry_count(), 1);
+
+        // Prompts should go to L3
+        cache.set("prompts_key".to_string(), vec![3], "prompts/list").await;
+        cache.sync().await;
+        assert_eq!(cache.l3_prompts.entry_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_cache_clear() {
+        let config = CacheConfig::default();
+        let cache = LayeredCache::new(config);
+
+        // Add entries to all layers
+        cache.set("key1".to_string(), vec![1], "tools/list").await;
+        cache.set("key2".to_string(), vec![2], "resources/list").await;
+        cache.set("key3".to_string(), vec![3], "prompts/list").await;
+
+        // Clear all
+        cache.clear().await;
+
+        // Verify all layers are empty
+        assert_eq!(cache.l1_tools.entry_count(), 0);
+        assert_eq!(cache.l2_resources.entry_count(), 0);
+        assert_eq!(cache.l3_prompts.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_cache_stats() {
+        let config = CacheConfig::default();
+        let cache = LayeredCache::new(config);
+
+        cache.set("key1".to_string(), vec![1], "tools/list").await;
+        let _ = cache.get("key1").await; // hit
+        let _ = cache.get("nonexistent").await; // miss
+
+        let stats = cache.stats().await;
+        assert_eq!(stats.total_hits, 1);
+        assert_eq!(stats.total_misses, 1);
+        assert!(stats.hit_rate > 0.0);
+    }
 }

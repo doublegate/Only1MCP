@@ -51,6 +51,9 @@ dashmap = "5.5"
 arc-swap = "1.6"
 parking_lot = "0.12"
 
+# Response caching (Feature 3)
+moka = { version = "0.12", features = ["future"] }
+
 # Connection pooling
 bb8 = "0.8"
 

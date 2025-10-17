@@ -191,24 +191,18 @@ impl RequestRouter {
     ///
     /// * `Ok((ServerId, Duration))` - Selected server and expected latency
     /// * `Err(RoutingError)` - No available backend or routing failure
-    #[instrument(skip(self, request, registry, cache))]
+    #[instrument(skip(self, request, registry, _cache))]
     pub async fn route_request(
         &self,
         request: &McpRequest,
         registry: &ServerRegistry,
-        cache: &ResponseCache,
+        _cache: &ResponseCache,
     ) -> std::result::Result<(ServerId, Duration), RoutingError> {
         let _method = request.method();
         let tool_name = extract_tool_name(request)?;
 
-        // Step 1: Check cache for memoized response
-        let cache_key = self.compute_cache_key(request);
-        if let Some(cached) = cache.get(&cache_key).await {
-            debug!("Cache hit for {}", tool_name);
-            return Ok((cached.server_id, Duration::ZERO));
-        }
-
-        // Step 2: Find servers that support this tool
+        // Find servers that support this tool
+        // Note: Response caching is handled at the handler level, not here
         let eligible_servers = registry.find_servers_for_tool(&tool_name).await?;
 
         if eligible_servers.is_empty() {

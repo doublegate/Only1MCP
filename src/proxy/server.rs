@@ -78,8 +78,7 @@ impl ProxyServer {
         let registry = Arc::new(RwLock::new(ServerRegistry::from_config(&config).await?));
 
         let cache = Arc::new(ResponseCache::new(
-            10000,             // max_entries
-            100 * 1024 * 1024, // 100 MB max_size
+            crate::cache::CacheConfig::default(),
         ));
 
         let metrics = Arc::new(Metrics::new());

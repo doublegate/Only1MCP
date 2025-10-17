@@ -177,6 +177,27 @@ lazy_static! {
         &["server_id"]
     ).unwrap();
 
+    // Cache metrics (Feature 3)
+    pub static ref CACHE_HITS_TOTAL: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_cache_hits_total",
+        "Total number of cache hits"
+    ).unwrap();
+
+    pub static ref CACHE_MISSES_TOTAL: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_cache_misses_total",
+        "Total number of cache misses"
+    ).unwrap();
+
+    pub static ref CACHE_SIZE_ENTRIES: prometheus::IntGauge = prometheus::register_int_gauge!(
+        "only1mcp_cache_size_entries",
+        "Current number of entries in cache"
+    ).unwrap();
+
+    pub static ref CACHE_EVICTIONS_TOTAL: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_cache_evictions_total",
+        "Total number of cache evictions"
+    ).unwrap();
+
     // Registry for all metrics
     pub static ref REGISTRY: Registry = {
         let registry = Registry::new();
@@ -198,6 +219,10 @@ lazy_static! {
         registry.register(Box::new(HEALTH_CHECK_TOTAL.clone())).unwrap();
         registry.register(Box::new(HEALTH_CHECK_DURATION_SECONDS.clone())).unwrap();
         registry.register(Box::new(SERVER_HEALTH_STATUS.clone())).unwrap();
+        registry.register(Box::new(CACHE_HITS_TOTAL.clone())).unwrap();
+        registry.register(Box::new(CACHE_MISSES_TOTAL.clone())).unwrap();
+        registry.register(Box::new(CACHE_SIZE_ENTRIES.clone())).unwrap();
+        registry.register(Box::new(CACHE_EVICTIONS_TOTAL.clone())).unwrap();
         registry
     };
 }
