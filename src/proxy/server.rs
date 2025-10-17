@@ -35,6 +35,7 @@ use crate::{
 };
 
 /// Main proxy server structure containing all shared state and configuration.
+#[derive(Clone)]
 pub struct ProxyServer {
     /// Server configuration loaded from YAML/TOML
     config: Arc<Config>,
@@ -188,6 +189,93 @@ impl ProxyServer {
     /// Trigger graceful shutdown
     pub fn shutdown(&self) {
         let _ = self.shutdown_tx.send(());
+    }
+
+    /// Run server with configuration hot-reload support
+    ///
+    /// This method creates a ConfigLoader that watches the configuration file
+    /// for changes and automatically applies them without server restart.
+    ///
+    /// # Arguments
+    ///
+    /// * `config_path` - Path to the configuration file to watch
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    /// use only1mcp::proxy::server::ProxyServer;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     ProxyServer::run_with_hot_reload(PathBuf::from("config.yaml")).await?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn run_with_hot_reload(config_path: std::path::PathBuf) -> Result<()> {
+        use crate::config::ConfigLoader;
+
+        // Create config loader with hot-reload
+        info!("Enabling configuration hot-reload for: {}", config_path.display());
+        let loader = ConfigLoader::new(config_path)?.watch()?;
+
+        let config = loader.get_config();
+        let mut reload_rx = loader.subscribe();
+
+        // Create server
+        let server = Arc::new(Self::new(config.as_ref().clone()).await?);
+
+        // Spawn reload handler
+        let server_clone = server.clone();
+        tokio::spawn(async move {
+            while reload_rx.changed().await.is_ok() {
+                let new_config = reload_rx.borrow().clone();
+                info!("Configuration change detected, applying new configuration...");
+
+                // Update server with new config
+                if let Err(e) = server_clone.update_config(new_config.as_ref()).await {
+                    tracing::error!("Failed to apply new config: {}", e);
+                } else {
+                    info!("Configuration successfully updated");
+                }
+            }
+        });
+
+        // Run server (we need to extract it from Arc)
+        let server_owned = Arc::try_unwrap(server)
+            .unwrap_or_else(|arc| (*arc).clone());
+        server_owned.run().await
+    }
+
+    /// Update server configuration during hot-reload
+    ///
+    /// This method is called when a configuration change is detected.
+    /// It updates the server registry with new backend servers.
+    ///
+    /// Note: Some configuration changes (like server host/port, TLS settings)
+    /// require a server restart and cannot be hot-reloaded.
+    async fn update_config(&self, new_config: &Config) -> Result<()> {
+        info!("Updating server configuration...");
+
+        // Update registry with new backends
+        let mut registry = self.registry.write().await;
+
+        // Clear existing servers
+        registry.clear();
+
+        // Add new servers from updated config
+        for server_config in &new_config.servers {
+            if server_config.enabled {
+                registry.add_server(server_config.clone()).await?;
+            }
+        }
+
+        info!(
+            "Configuration updated: {} backend servers registered",
+            new_config.servers.iter().filter(|s| s.enabled).count()
+        );
+
+        Ok(())
     }
 }
 

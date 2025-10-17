@@ -72,6 +72,7 @@ figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 
 # File watching for hot-reload
 notify = "6.1"
+notify-debouncer-full = "0.3"
 
 # Process management
 nix = { version = "0.27", features = ["process"] }

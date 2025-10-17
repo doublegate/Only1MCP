@@ -534,6 +534,22 @@ impl ServerRegistry {
     pub fn is_empty(&self) -> bool {
         self.servers.is_empty()
     }
+
+    /// Clear all servers from the registry (used during hot-reload)
+    pub fn clear(&mut self) {
+        self.servers.clear();
+    }
+
+    /// Add a server to the registry (used during hot-reload)
+    pub async fn add_server(&mut self, server_config: crate::config::McpServerConfig) -> std::result::Result<(), Error> {
+        let info = ServerInfo {
+            id: server_config.id.clone(),
+            weight: server_config.weight,
+            tools: Vec::new(), // Would be discovered from server capabilities
+        };
+        self.servers.insert(server_config.id, info);
+        Ok(())
+    }
 }
 
 /// Server information for routing decisions.

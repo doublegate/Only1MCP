@@ -123,6 +123,17 @@ lazy_static! {
         &["server_id"]
     ).unwrap();
 
+    // Configuration hot-reload metrics
+    pub static ref CONFIG_RELOAD_TOTAL: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_config_reload_total",
+        "Total number of successful configuration reloads"
+    ).unwrap();
+
+    pub static ref CONFIG_RELOAD_ERRORS: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_config_reload_errors_total",
+        "Total number of configuration reload errors"
+    ).unwrap();
+
     // Rate limiting metrics
     pub static ref RATE_LIMIT_EXCEEDED: CounterVec = register_counter_vec!(
         opts!(

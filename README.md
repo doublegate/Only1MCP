@@ -3,12 +3,13 @@
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-27%2F27%20passing-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-38%2F38%20passing-success.svg)]()
 [![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
+[![Phase 2](https://img.shields.io/badge/Phase%202-Feature%201%20Complete-green.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 
-> **Status**: 🎉 Phase 1 MVP Complete - Production-ready foundation established
+> **Status**: 🎉 Phase 2 Feature 1 Complete - Configuration Hot-Reload operational
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
@@ -19,6 +20,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 ### Phase 1 MVP (✅ Complete)
 
 **Core Proxy Capabilities**
+
 - 🚀 **High-Performance HTTP Proxy** - Axum-based server with <5ms overhead
 - 🔄 **Multiple Transport Support** - HTTP (with connection pooling), STDIO (with process sandboxing)
 - 🎯 **Intelligent Request Routing** - 5 load balancing algorithms (round-robin, least-connections, consistent hashing, random, weighted-random)
@@ -27,12 +29,14 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - 🔐 **Enterprise Authentication** - JWT validation, OAuth2/OIDC integration, Hierarchical RBAC
 
 **MCP Protocol Support**
+
 - ✅ **Tools API** - Full support for tool listing and execution
 - ✅ **Resources API** - Resource templates and content fetching
 - ✅ **Prompts API** - Prompt discovery and argument handling
 - ✅ **JSON-RPC 2.0** - Complete protocol implementation
 
 **Performance & Reliability**
+
 - ⚡ **<5ms Latency** - Minimal proxy overhead achieved
 - 📈 **10k+ req/s Throughput** - Designed for high-volume workloads
 - 💾 **Multi-Tier Caching** - DashMap-based concurrent cache system
@@ -40,6 +44,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - 🏥 **Health Monitoring** - Circuit breakers and health state tracking
 
 **Testing & Quality**
+
 - ✅ **27/27 Tests Passing** - 100% test success rate
 - 🧪 **6 Integration Tests** - Server startup, health, metrics, error handling
 - 🔬 **21 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer
@@ -50,6 +55,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Rust 1.75+ (stable)
 - Cargo (comes with Rust)
 - Git
@@ -105,14 +111,99 @@ curl -X POST http://localhost:8080/mcp \
   }'
 ```
 
+### Configuration Hot-Reload
+
+Only1MCP supports automatic configuration reloading without server restart:
+
+```bash
+# Start server with hot-reload enabled
+only1mcp start --config only1mcp.yaml
+
+# In another terminal, modify configuration file
+vim only1mcp.yaml
+
+# Server automatically detects changes and reloads (within 500ms)
+# No restart required!
+```
+
+**Supported config formats:** YAML, TOML
+
+**What gets reloaded:**
+- Backend server list (add/remove/modify servers)
+- Health check settings
+- Load balancing configuration
+- Server weights and priorities
+- Authentication rules
+
+**What requires restart:**
+- Server host/port binding
+- TLS certificates
+- Core runtime settings
+
+**Features:**
+- 📁 **File Watching** - notify 6.1 with debounced events (500ms)
+- ⚛️ **Atomic Updates** - Lock-free config swapping via ArcSwap
+- ✅ **Validation First** - Invalid configs rejected, old config preserved
+- 📊 **Metrics Tracking** - config_reload_total, config_reload_errors
+- 🔔 **Subscriber Pattern** - Multiple components notified independently
+
+**Example:**
+
+```yaml
+# only1mcp.yaml
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+servers:
+  - id: "backend1"
+    name: "Primary MCP Server"
+    enabled: true
+    transport:
+      type: "http"
+      url: "http://localhost:3000"
+    weight: 100
+
+  # Add new backend without restart!
+  - id: "backend2"
+    name: "Secondary MCP Server"
+    enabled: true
+    transport:
+      type: "stdio"
+      command: "mcp-server"
+      args: ["--port", "3001"]
+    weight: 50
+```
+
+Modify the config, save, and within 500ms the proxy will:
+1. Detect the file change (debounced)
+2. Load and validate the new configuration
+3. Atomically swap if validation passes
+4. Notify all subscribers (registry, health checker, etc.)
+5. Log success or error with details
+
+**Resilience:**
+- Invalid YAML/TOML → Old config preserved, error logged
+- Missing file → Error logged, old config active
+- Validation failure → Old config preserved, detailed error
+- Rapid changes → Debounced (only last change applied)
+
+**Monitoring:**
+```bash
+# Check reload metrics
+curl http://localhost:8080/api/v1/admin/metrics | grep config_reload
+```
+
 ---
 
 ## 📊 Project Status
 
 ### Phase 1: MVP Foundation (✅ 100% Complete)
+
 **Completed**: October 16, 2025
 
 **Achievements**:
+
 - ✅ Zero compilation errors (76 errors fixed)
 - ✅ 27/27 tests passing (100% pass rate)
 - ✅ All handlers fully implemented
@@ -123,6 +214,7 @@ curl -X POST http://localhost:8080/mcp \
 - ✅ Backend communication working
 
 **Metrics**:
+
 - Build time: ~45s debug, ~90s release
 - Binary size: 8.2MB debug, 3.1MB release (stripped)
 - Clippy warnings: 40 → 2 (95% reduction)
@@ -130,6 +222,7 @@ curl -X POST http://localhost:8080/mcp \
 - Documentation: 5,000+ lines
 
 ### Phase 2: Advanced Features (🔄 Next)
+
 **Target**: Weeks 5-8
 
 - [ ] Configuration hot-reload (notify integration)
@@ -140,6 +233,7 @@ curl -X POST http://localhost:8080/mcp \
 - [ ] Performance benchmarking suite
 
 ### Phase 3: Enterprise Features (📋 Planned)
+
 **Target**: Weeks 9-12
 
 - [ ] Advanced RBAC policies
@@ -149,6 +243,7 @@ curl -X POST http://localhost:8080/mcp \
 - [ ] Rate limiting per client
 
 ### Phase 4: Extensions (🎯 Future)
+
 **Target**: Weeks 13+
 
 - [ ] Plugin system (WebAssembly)
@@ -163,34 +258,34 @@ curl -X POST http://localhost:8080/mcp \
 Only1MCP uses a modular, high-performance architecture:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                 AI Client (Claude, etc.)            │
-└───────────────────┬─────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│                 AI Client (Claude, etc.)           │
+└───────────────────┬────────────────────────────────┘
                     │ JSON-RPC 2.0 / MCP Protocol
                     │
-┌───────────────────▼─────────────────────────────────┐
-│              Only1MCP Proxy Server                  │
+┌───────────────────▼────────────────────────────────┐
+│              Only1MCP Proxy Server                 │
 │  ┌─────────────────────────────────────────────┐   │
 │  │  Axum HTTP Server + Middleware Stack        │   │
 │  │  (Auth → CORS → Compression → Rate Limit)   │   │
 │  └──────────────────┬──────────────────────────┘   │
-│                     │                                │
+│                     │                              │
 │  ┌──────────────────▼──────────────────────────┐   │
 │  │  Request Router & Load Balancer             │   │
 │  │  - 5 algorithms (round-robin, least-conn,   │   │
-│  │    consistent hash, random, weighted-random) │   │
-│  │  - Health-aware routing                      │   │
-│  │  - Circuit breaker integration               │   │
+│  │   consistent hash, random, weighted-random) │   │
+│  │  - Health-aware routing                     │   │
+│  │  - Circuit breaker integration              │   │
 │  └──────────────────┬──────────────────────────┘   │
-│                     │                                │
+│                     │                              │
 │  ┌──────────────────▼──────────────────────────┐   │
-│  │  Transport Layer                             │   │
+│  │  Transport Layer                            │   │
 │  │  - HTTP (bb8 connection pooling)            │   │
 │  │  - STDIO (process sandboxing)               │   │
 │  │  - SSE (long-lived connections)             │   │
 │  │  - WebSocket (full-duplex)                  │   │
-│  └──────────────────┬──────────────────────────┘   │
-└────────────────────┼────────────────────────────────┘
+│  └─────────────────┬───────────────────────────┘   │
+└────────────────────┼───────────────────────────────┘
                      │
     ┌────────────────┼────────────────┐
     │                │                │
@@ -283,6 +378,7 @@ Only1MCP/
 Only1MCP is designed for high-performance production workloads:
 
 **Target Metrics** (Phase 1 validated):
+
 - **Latency**: <5ms proxy overhead ✅
 - **Throughput**: 10,000+ requests/second ✅
 - **Memory**: <100MB for 100 backend servers ✅
@@ -290,6 +386,7 @@ Only1MCP is designed for high-performance production workloads:
 - **Context Reduction**: 50-70% via optimization (architecture ready)
 
 **Optimization Techniques**:
+
 - Lock-free reads with `Arc<RwLock<T>>` and `DashMap`
 - Connection pooling with bb8 (configurable limits)
 - Consistent hashing for even load distribution
@@ -327,8 +424,8 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 This project is dual-licensed under either:
 
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT License ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
 
 at your option.
 

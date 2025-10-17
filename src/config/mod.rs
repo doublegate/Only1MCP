@@ -10,6 +10,8 @@ pub mod loader;
 pub mod schema;
 pub mod validation;
 
+pub use loader::ConfigLoader;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[derive(Default)]
 pub struct Config {
