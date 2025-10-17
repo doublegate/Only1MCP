@@ -117,7 +117,12 @@ impl LayeredCache {
     }
 
     /// Run pending maintenance tasks to ensure immediate visibility (for testing).
-    #[cfg(test)]
+    ///
+    /// This method is essential when testing moka caches because moka's async operations
+    /// (insertions, evictions, invalidations) are non-blocking and processed in the background.
+    /// Call this method before assertions that check entry_count() to ensure all pending
+    /// operations have completed.
+    #[doc(hidden)]
     pub async fn sync(&self) {
         self.l1_tools.run_pending_tasks().await;
         self.l2_resources.run_pending_tasks().await;

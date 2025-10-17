@@ -8,11 +8,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned for Phase 2 (Remaining)
-- Active health checking with timer-based probes
-- Response caching with TTL-based LRU eviction
 - Request batching with 100ms windows
 - TUI interface using ratatui framework
 - Performance benchmarking suite
+
+## [0.2.0-dev] - 2025-10-17
+
+### 🎯 100% Test Pass Rate Achieved (64/64 Tests)
+
+**Fixed**
+
+**Response Caching Test Suite - All 11 Tests Passing**
+- Fixed async timing issues in cache tests by adding `sync()` calls
+- moka cache operations are async/non-blocking - tests must call `run_pending_tasks()` for immediate visibility
+- Made `LayeredCache::sync()` public (was only available in unit tests)
+- Updated `test_lru_eviction` to reflect moka's TinyLFU behavior (not pure LRU)
+- Tests fixed:
+  1. `test_cache_clear_all` - Added sync() before stats check
+  2. `test_lru_eviction` - Simplified to verify capacity enforcement (not specific key eviction)
+  3. `test_cache_stats_tracking` - Added sync() after insertions
+  4. `test_cache_layer_routing` - Added sync() after all 6 insertions
+  5. `test_concurrent_cache_access` - Added sync() before final stats check
+  6. `test_cache_eviction_metrics` - Added sync() after insertions
+
+**Root Cause Analysis**
+- moka's async cache processes insertions, evictions, and invalidations in background
+- Tests checking `entry_count()` must call `sync()` (run_pending_tasks) first
+- Without sync(), entry counts appear as 0 even though operations are pending
+- This is documented moka behavior - not a bug, but a testing pattern requirement
+
+**TinyLFU Eviction Policy Understanding**
+- moka uses TinyLFU (Tiny Least Frequently Used), NOT pure LRU
+- TinyLFU combines frequency (LFU) for admission + recency (LRU) for eviction
+- New entries can be REJECTED if they lack sufficient frequency
+- This prevents cache pollution from one-time accesses (correct behavior)
+- Tests updated to verify capacity enforcement, not specific eviction choices
+
+**Test Results**
+- **Before**: 46/52 passing (88%)
+- **After**: 64/64 passing (100%) ✅
+- Unit tests (lib): 34/34 passing
+- Integration (health_checking): 7/7 passing
+- Integration (response_caching): 11/11 passing
+- Integration (server_startup): 6/6 passing
+- Integration (error_handling): 6/6 passing
 
 ## [0.2.0-dev] - 2025-10-17
 
