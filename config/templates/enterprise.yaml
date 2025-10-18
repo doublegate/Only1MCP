@@ -439,3 +439,9 @@ compliance:
     detection: true
     masking: true
     retention: 90d
+
+# TUI Configuration
+tui:
+  enabled: false  # Use Grafana/Prometheus for enterprise monitoring
+  default_tab: overview  # Tab to show on startup (overview/servers/requests/cache/logs)
+  refresh_ms: 1000  # Metrics update interval in milliseconds

@@ -194,17 +194,11 @@ limits:
   # Timeout overrides for debugging
   debug_timeout_multiplier: 10  # 10x timeouts when debugging
 
-# Optional: TUI dashboard settings
+# TUI Configuration
 tui:
-  enabled: false  # Set to true to enable TUI
-  refresh_interval: 1s
-
-  # Sections to display
-  sections:
-    - overview
-    - servers
-    - requests
-    - logs
+  enabled: false  # Set to true to enable terminal dashboard
+  default_tab: overview  # Tab to show on startup (overview/servers/requests/cache/logs)
+  refresh_ms: 1000  # Metrics update interval in milliseconds
 
 # Notes for developers
 # ====================

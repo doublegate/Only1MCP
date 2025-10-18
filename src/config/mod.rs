@@ -25,6 +25,8 @@ pub struct Config {
     pub auth: AuthConfig,
     #[serde(default)]
     pub observability: ObservabilityConfig,
+    #[serde(default)]
+    pub tui: TuiConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -205,6 +207,16 @@ pub struct ObservabilityConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TuiConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_tui_default_tab")]
+    pub default_tab: String,
+    #[serde(default = "default_tui_refresh_ms")]
+    pub refresh_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
     pub level: String,
@@ -283,6 +295,12 @@ fn default_log_level() -> String {
 fn default_log_format() -> String {
     "json".to_string()
 }
+fn default_tui_default_tab() -> String {
+    "overview".to_string()
+}
+fn default_tui_refresh_ms() -> u64 {
+    1000
+}
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -292,6 +310,16 @@ impl Default for ServerConfig {
             worker_threads: 0,
             max_connections: default_max_connections(),
             tls: TlsConfig::default(),
+        }
+    }
+}
+
+impl Default for TuiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_tab: default_tui_default_tab(),
+            refresh_ms: default_tui_refresh_ms(),
         }
     }
 }

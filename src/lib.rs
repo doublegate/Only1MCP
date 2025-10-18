@@ -13,6 +13,7 @@ pub mod metrics;
 pub mod proxy;
 pub mod routing;
 pub mod transport;
+pub mod tui;
 pub mod types;
 
 pub use config::Config;

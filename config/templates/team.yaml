@@ -353,6 +353,12 @@ environments:
       logging.level: warn
       hot_reload.enabled: false
 
+# TUI Configuration
+tui:
+  enabled: true  # Enabled for team monitoring
+  default_tab: overview  # Tab to show on startup (overview/servers/requests/cache/logs)
+  refresh_ms: 500  # Faster refresh for teams (500ms)
+
 # Notes for teams
 # ===============
 # 1. Replace ${VARIABLE} placeholders with actual values
