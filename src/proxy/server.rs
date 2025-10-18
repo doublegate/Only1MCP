@@ -132,12 +132,16 @@ impl ProxyServer {
                     // Send via appropriate transport (synchronous wrapper around async)
                     let response = match &server_config.transport {
                         crate::config::TransportConfig::Http { url, .. } => {
+                            // Nesting required for: transport extraction → error handling
+                            #[allow(clippy::excessive_nesting)]
                             let http_transport =
                                 http_transport_clone.as_ref().ok_or_else(|| {
                                     Error::Transport("HTTP transport not initialized".into())
                                 })?;
 
                             // Use tokio runtime to block on async operation
+                            // Nesting required for: block_in_place → block_on async runtime bridge
+                            #[allow(clippy::excessive_nesting)]
                             tokio::task::block_in_place(|| {
                                 tokio::runtime::Handle::current().block_on(async {
                                     http_transport
@@ -148,6 +152,8 @@ impl ProxyServer {
                             })?
                         },
                         crate::config::TransportConfig::Stdio { command, args, env } => {
+                            // Nesting required for: transport extraction → error handling
+                            #[allow(clippy::excessive_nesting)]
                             let stdio_transport =
                                 stdio_transport_clone.as_ref().ok_or_else(|| {
                                     Error::Transport("STDIO transport not initialized".into())
@@ -164,6 +170,8 @@ impl ProxyServer {
                                 sandbox: true,
                             };
 
+                            // Nesting required for: block_in_place → block_on async runtime bridge
+                            #[allow(clippy::excessive_nesting)]
                             tokio::task::block_in_place(|| {
                                 tokio::runtime::Handle::current().block_on(async {
                                     stdio_transport

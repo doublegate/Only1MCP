@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -141,6 +141,8 @@ impl ConfigLoader {
                 match result {
                     Ok(events) => {
                         for event in events {
+                            // Nesting required for: event loop → path checking → reload handling
+                            #[allow(clippy::excessive_nesting)]
                             if event.paths.contains(&config_path) {
                                 debug!("Config file changed: {:?}", event.kind);
                                 if let Err(e) =

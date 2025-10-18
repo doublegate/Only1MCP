@@ -373,11 +373,11 @@ impl HealthChecker {
 
                 // Determine state based on thresholds
                 let previous_state = status.state.clone();
-                if status.success_count >= self.success_threshold {
-                    if status.state != HealthState::Healthy {
-                        info!("Backend {} is now healthy", self.backend_id);
-                        status.state = HealthState::Healthy;
-                    }
+                if status.success_count >= self.success_threshold
+                    && status.state != HealthState::Healthy
+                {
+                    info!("Backend {} is now healthy", self.backend_id);
+                    status.state = HealthState::Healthy;
                 }
 
                 // Notify circuit breaker of successful check
@@ -417,6 +417,8 @@ impl HealthChecker {
                         status.state = HealthState::Unhealthy;
 
                         // Notify circuit breaker to open (block traffic)
+                        // Nesting required for: threshold check → state change → circuit breaker notification
+                        #[allow(clippy::excessive_nesting)]
                         if let Some(cb) = &self.circuit_breaker {
                             cb.trip(&self.backend_id).await;
                         }

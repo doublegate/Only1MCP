@@ -1,7 +1,6 @@
 //! Integration tests for TUI interface
 
 use only1mcp::tui::{Event, LogEntry, LogLevel, MetricsSnapshot, ServerInfo, ServerStatus};
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 
@@ -103,8 +102,7 @@ async fn test_tui_quit_event() {
     let received = rx.recv().await.unwrap();
     match received {
         Event::Quit => {
-            // Quit event received successfully
-            assert!(true);
+            // Quit event received successfully - test passes
         },
         _ => panic!("Expected Quit event"),
     }

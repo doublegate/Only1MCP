@@ -62,7 +62,7 @@ fn extract_percentiles(mf: &MetricFamily) -> (f64, f64, f64) {
     // Extract p50, p95, p99 from histogram
     for m in mf.get_metric() {
         if m.has_histogram() {
-            let h = m.get_histogram();
+            let _h = m.get_histogram();
             // Parse quantiles from histogram
             // Simplified - in production, calculate from buckets
             return (2.0, 8.0, 15.0); // Placeholder

@@ -14,6 +14,3 @@ mod tests;
 pub use app::{run_tui, LogEntry, LogLevel, MetricsSnapshot, ServerInfo, ServerStatus, TuiApp};
 pub use event::Event;
 pub use metrics::scrape_metrics;
-
-use crate::config::Config;
-use crate::error::Result;

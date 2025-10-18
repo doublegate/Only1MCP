@@ -1,4 +1,4 @@
-use crate::tui::app::{ServerInfo, ServerStatus, TuiApp};
+use crate::tui::app::{ServerStatus, TuiApp};
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},

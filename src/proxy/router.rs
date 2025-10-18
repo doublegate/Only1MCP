@@ -24,6 +24,7 @@ use crate::types::{McpRequest, ServerId};
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -45,17 +46,18 @@ pub enum RoutingAlgorithm {
     WeightedRandom,
 }
 
-impl RoutingAlgorithm {
-    /// Parse routing algorithm from string
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl std::str::FromStr for RoutingAlgorithm {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "consistent_hash" | "consistent-hash" => Self::ConsistentHash,
             "least_connections" | "least-connections" => Self::LeastConnections,
             "round_robin" | "round-robin" => Self::RoundRobin,
             "random" => Self::Random,
             "weighted_random" | "weighted-random" => Self::WeightedRandom,
             _ => Self::RoundRobin, // Default fallback
-        }
+        })
     }
 }
 
@@ -232,7 +234,7 @@ impl RequestRouter {
         }
 
         // Step 4: Apply routing algorithm
-        let algorithm = RoutingAlgorithm::from_str(&self.config.algorithm);
+        let algorithm = RoutingAlgorithm::from_str(&self.config.algorithm).unwrap();
         let selected_server = match algorithm {
             RoutingAlgorithm::ConsistentHash => {
                 self.route_consistent_hash(&tool_name, &healthy_servers)
@@ -391,6 +393,8 @@ impl RequestRouter {
     }
 
     /// Compute a cache key for the request.
+    /// Reserved for future request-level caching integration.
+    #[allow(dead_code)]
     fn compute_cache_key(&self, request: &McpRequest) -> String {
         format!("{}:{}", request.method(), request.params_hash())
     }

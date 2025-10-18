@@ -4,7 +4,6 @@ mod common;
 
 use common::*;
 use serde_json::json;
-use std::time::Duration;
 
 #[tokio::test]
 async fn test_server_starts_and_binds() {
@@ -74,7 +73,7 @@ async fn test_metrics_endpoint_accessible() {
     let content_type = response.headers().get("content-type").and_then(|v| v.to_str().ok());
 
     assert!(
-        content_type.map_or(false, |ct| ct.contains("text/plain")),
+        content_type.is_some_and(|ct| ct.contains("text/plain")),
         "Expected text/plain content type"
     );
 
@@ -173,7 +172,7 @@ async fn test_concurrent_requests() {
         let url = format!("{}/api/v1/admin/health", server.url());
 
         tasks.push(tokio::spawn(async move {
-            client.get(&url).send().await.expect(&format!("Request {} failed", i))
+            client.get(&url).send().await.unwrap_or_else(|_| panic!("Request {} failed", i))
         }));
     }
 

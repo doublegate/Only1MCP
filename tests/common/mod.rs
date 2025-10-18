@@ -37,6 +37,7 @@ pub fn test_config_with_port(port: u16) -> Config {
 }
 
 /// Create a test configuration with mock backends for full functionality
+#[allow(dead_code)]
 pub fn test_config_with_backends(port: u16, backend_urls: Vec<String>) -> Config {
     let mut servers = Vec::new();
 
@@ -84,6 +85,7 @@ pub fn test_config_with_backends(port: u16, backend_urls: Vec<String>) -> Config
 }
 
 /// Create a mock MCP server configuration
+#[allow(dead_code)]
 pub fn mock_server_config(id: &str, url: &str) -> McpServerConfig {
     McpServerConfig {
         id: id.to_string(),
@@ -146,6 +148,7 @@ pub struct TestServer {
 }
 
 impl TestServer {
+    #[allow(dead_code)]
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }
@@ -170,6 +173,7 @@ pub fn test_client() -> Client {
 }
 
 /// Assert that a JSON-RPC response is successful
+#[allow(dead_code)]
 pub fn assert_jsonrpc_success(response: &Value) {
     assert_eq!(response["jsonrpc"], "2.0", "Invalid JSON-RPC version");
     assert!(
@@ -185,6 +189,7 @@ pub fn assert_jsonrpc_success(response: &Value) {
 }
 
 /// Assert that a JSON-RPC response has an error
+#[allow(dead_code)]
 pub fn assert_jsonrpc_error(response: &Value, expected_code: i32) {
     assert_eq!(response["jsonrpc"], "2.0", "Invalid JSON-RPC version");
     assert!(response.get("error").is_some(), "Missing error field");
@@ -196,6 +201,7 @@ pub fn assert_jsonrpc_error(response: &Value, expected_code: i32) {
 }
 
 /// Mount a mock tools/list endpoint
+#[allow(dead_code)]
 pub async fn mount_tools_list(mock: &MockServer, tools: Vec<Value>) {
     Mock::given(method("POST"))
         .and(body_json(json!({"method": "tools/list"})))
@@ -211,6 +217,7 @@ pub async fn mount_tools_list(mock: &MockServer, tools: Vec<Value>) {
 }
 
 /// Mount a mock tools/call endpoint
+#[allow(dead_code)]
 pub async fn mount_tools_call(mock: &MockServer, tool_name: &str, response: Value) {
     Mock::given(method("POST"))
         .and(body_json(json!({
@@ -227,6 +234,7 @@ pub async fn mount_tools_call(mock: &MockServer, tool_name: &str, response: Valu
 }
 
 /// Create a sample tool JSON object
+#[allow(dead_code)]
 pub fn sample_tool(name: &str, description: &str) -> Value {
     json!({
         "name": name,
@@ -240,6 +248,7 @@ pub fn sample_tool(name: &str, description: &str) -> Value {
 }
 
 /// Wait for a condition with timeout
+#[allow(dead_code)]
 pub async fn wait_for<F>(mut condition: F, timeout: Duration) -> bool
 where
     F: FnMut() -> bool,

@@ -15,10 +15,10 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use only1mcp::batching::BatchAggregator;
 use only1mcp::config::BatchingConfig;
 use only1mcp::types::McpRequest;
-use tokio::runtime::Runtime;
 use serde_json::json;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 /// Create mock request
 fn mock_request(id: i64) -> McpRequest {
@@ -52,10 +52,9 @@ fn bench_no_batching(c: &mut Criterion) {
             let request = mock_request(count);
             // Note: This will error since there's no actual backend,
             // but we're benchmarking the batching overhead
-            let _ = aggregator.submit_request(
-                black_box("server1".to_string()),
-                black_box(request)
-            ).await;
+            let _ = aggregator
+                .submit_request(black_box("server1".to_string()), black_box(request))
+                .await;
         });
     });
 
@@ -81,10 +80,9 @@ fn bench_batching_enabled(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             let count = counter.fetch_add(1, Ordering::Relaxed);
             let request = mock_request(count);
-            let _ = aggregator.submit_request(
-                black_box("server1".to_string()),
-                black_box(request)
-            ).await;
+            let _ = aggregator
+                .submit_request(black_box("server1".to_string()), black_box(request))
+                .await;
         });
     });
 
@@ -114,10 +112,9 @@ fn bench_varying_sizes(c: &mut Criterion) {
                 b.to_async(&rt).iter(|| async {
                     let count = counter.fetch_add(1, Ordering::Relaxed);
                     let request = mock_request(count);
-                    let _ = aggregator.submit_request(
-                        black_box("server1".to_string()),
-                        black_box(request)
-                    ).await;
+                    let _ = aggregator
+                        .submit_request(black_box("server1".to_string()), black_box(request))
+                        .await;
                 });
             },
         );
@@ -138,7 +135,7 @@ fn bench_concurrent(c: &mut Criterion) {
     }));
 
     let mut group = c.benchmark_group("batching/concurrent");
-    group.throughput(Throughput::Elements(10));  // 10 concurrent clients
+    group.throughput(Throughput::Elements(10)); // 10 concurrent clients
 
     group.bench_function("10_clients", |b| {
         b.to_async(&rt).iter(|| async {
@@ -149,10 +146,7 @@ fn bench_concurrent(c: &mut Criterion) {
                 let agg = Arc::clone(&aggregator);
                 let handle = tokio::spawn(async move {
                     let request = mock_request(i);
-                    let _ = agg.submit_request(
-                        "server1".to_string(),
-                        request
-                    ).await;
+                    let _ = agg.submit_request("server1".to_string(), request).await;
                 });
                 handles.push(handle);
             }

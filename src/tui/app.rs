@@ -89,10 +89,7 @@ impl TuiApp {
 }
 
 /// Run the TUI in a dedicated tokio task
-pub async fn run_tui(
-    config: Arc<Config>,
-    mut event_rx: mpsc::UnboundedReceiver<Event>,
-) -> Result<()> {
+pub async fn run_tui(config: Arc<Config>, event_rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
     // Spawn blocking task for terminal I/O
     tokio::task::spawn_blocking(move || run_tui_blocking(config, event_rx))
         .await

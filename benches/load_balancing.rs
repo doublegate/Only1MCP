@@ -13,7 +13,7 @@
 //! Total: 15 benchmarks
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use only1mcp::routing::load_balancer::{LoadBalancer, RoutingAlgorithm, RoutingConfig, HashKey};
+use only1mcp::routing::load_balancer::{HashKey, LoadBalancer, RoutingAlgorithm, RoutingConfig};
 use tokio::runtime::Runtime;
 
 /// Helper to create routing config for a specific algorithm
@@ -50,11 +50,7 @@ fn bench_round_robin(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             b.to_async(&rt).iter(|| async {
                 // Benchmark the routing decision
-                let _ = lb.select_server(
-                    black_box("tools/list"),
-                    black_box(&servers),
-                    None
-                ).await;
+                let _ = lb.select_server(black_box("tools/list"), black_box(&servers), None).await;
             });
         });
     }
@@ -83,11 +79,7 @@ fn bench_least_connections(c: &mut Criterion) {
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             b.to_async(&rt).iter(|| async {
-                let _ = lb.select_server(
-                    black_box("tools/list"),
-                    black_box(&servers),
-                    None
-                ).await;
+                let _ = lb.select_server(black_box("tools/list"), black_box(&servers), None).await;
             });
         });
     }
@@ -114,11 +106,7 @@ fn bench_consistent_hash(c: &mut Criterion) {
             b.to_async(&rt).iter(|| async {
                 // Use varying keys to test hash distribution
                 let key = format!("request-{}", black_box(12345));
-                let _ = lb.select_server(
-                    black_box(&key),
-                    black_box(&servers),
-                    None
-                ).await;
+                let _ = lb.select_server(black_box(&key), black_box(&servers), None).await;
             });
         });
     }
@@ -142,11 +130,7 @@ fn bench_random(c: &mut Criterion) {
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             b.to_async(&rt).iter(|| async {
-                let _ = lb.select_server(
-                    black_box("tools/list"),
-                    black_box(&servers),
-                    None
-                ).await;
+                let _ = lb.select_server(black_box("tools/list"), black_box(&servers), None).await;
             });
         });
     }
@@ -172,11 +156,7 @@ fn bench_weighted_random(c: &mut Criterion) {
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             b.to_async(&rt).iter(|| async {
-                let _ = lb.select_server(
-                    black_box("tools/list"),
-                    black_box(&servers),
-                    None
-                ).await;
+                let _ = lb.select_server(black_box("tools/list"), black_box(&servers), None).await;
             });
         });
     }

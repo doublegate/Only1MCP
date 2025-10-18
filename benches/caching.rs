@@ -13,10 +13,10 @@
 //! Total: 5 benchmarks
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use only1mcp::cache::{LayeredCache, CacheConfig};
-use tokio::runtime::Runtime;
-use std::time::Duration;
+use only1mcp::cache::{CacheConfig, LayeredCache};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+use tokio::runtime::Runtime;
 
 /// Create a cache with test configuration
 fn test_cache() -> LayeredCache {
@@ -43,7 +43,7 @@ fn bench_cache_hit(c: &mut Criterion) {
             let value = format!("value-{}", i).into_bytes();
             cache.set(key, value, "test/method").await;
         }
-        cache.sync().await;  // Ensure all entries are committed
+        cache.sync().await; // Ensure all entries are committed
     });
 
     let mut group = c.benchmark_group("caching/hit");
@@ -124,7 +124,7 @@ fn bench_lru_eviction(c: &mut Criterion) {
     // Small cache to force evictions
     let cache = LayeredCache::new(CacheConfig {
         enabled: true,
-        l1_capacity: 10,  // Very small to trigger evictions
+        l1_capacity: 10, // Very small to trigger evictions
         l1_ttl: Duration::from_secs(300),
         l2_capacity: 5,
         l2_ttl: Duration::from_secs(1800),
@@ -141,7 +141,7 @@ fn bench_lru_eviction(c: &mut Criterion) {
             let count = counter.fetch_add(1, Ordering::Relaxed);
             // Insert new entries, forcing evictions
             let key = format!("key-{}", count);
-            let value = vec![0u8; 100];  // Small value
+            let value = vec![0u8; 100]; // Small value
             cache.set(black_box(key), black_box(value), "test/method").await;
         });
     });
@@ -166,9 +166,9 @@ fn bench_stats_tracking(c: &mut Criterion) {
         // Generate some cache activity
         for i in 0..100 {
             let key = if i % 2 == 0 {
-                format!("key-{}", i % 50)  // Hit
+                format!("key-{}", i % 50) // Hit
             } else {
-                format!("miss-{}", i)  // Miss
+                format!("miss-{}", i) // Miss
             };
             let _ = cache.get(&key).await;
         }

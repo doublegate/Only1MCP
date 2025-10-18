@@ -604,7 +604,7 @@ mod tests {
         lb.connection_counts.insert("server2".to_string(), AtomicUsize::new(5));
 
         // Should select server2 (fewer connections)
-        let selected = lb.select_server("key", &servers, None).await.unwrap();
+        let _selected = lb.select_server("key", &servers, None).await.unwrap();
         // Due to Power of Two Choices, not guaranteed but highly likely
         // to select server2
     }

@@ -361,6 +361,7 @@ impl AuthorizationEngine {
     }
 
     /// Recursively collect permissions with inheritance
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_permissions(
         &self,
         roles: &HashMap<String, Role>,
@@ -757,7 +758,7 @@ mod tests {
         engine.add_role(dev_role).await.unwrap();
         engine.assign_role("user2", "developer").await.unwrap();
 
-        let context = AuthzContext {
+        let _context = AuthzContext {
             request_id: "req2".to_string(),
             ip_address: None,
             user_agent: None,

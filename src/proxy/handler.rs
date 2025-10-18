@@ -6,7 +6,7 @@
 use crate::error::{Error, ProxyError, Result};
 use crate::proxy::router::RequestRouter;
 use crate::proxy::server::AppState;
-use crate::types::{McpRequest, McpResponse, Prompt, Resource, Tool};
+use crate::types::{McpRequest, Prompt, Resource, Tool};
 use axum::{
     extract::{ws::WebSocketUpgrade, State},
     response::Response,
@@ -87,6 +87,8 @@ async fn handle_tools_list_impl(
                 state.batch_aggregator.submit_request(server.clone(), request).await.and_then(
                     |response| {
                         // Parse response and extract tools array
+                        // Nesting required for: async response → result extraction → error handling
+                        #[allow(clippy::excessive_nesting)]
                         let result = response.result.ok_or_else(|| {
                             Error::Server("No result in tools/list response".into())
                         })?;
@@ -95,6 +97,8 @@ async fn handle_tools_list_impl(
                             .get("tools")
                             .ok_or_else(|| Error::Server("No tools field in response".into()))?;
 
+                        // Nesting required for: JSON parsing → error mapping
+                        #[allow(clippy::excessive_nesting)]
                         let tools: Vec<Tool> = serde_json::from_value(tools_value.clone())
                             .map_err(|e| {
                                 Error::Serialization(format!("Failed to parse tools: {}", e))

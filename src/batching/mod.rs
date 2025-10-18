@@ -59,12 +59,16 @@ struct BatchKey {
 struct PendingRequest {
     request: McpRequest,
     response_tx: oneshot::Sender<Result<McpResponse>>,
+    // Reserved for future metrics/logging - timestamp when request was submitted
+    #[allow(dead_code)]
     submitted_at: Instant,
 }
 
 /// Collection of pending requests for a specific batch
 struct PendingBatch {
     requests: Vec<PendingRequest>,
+    // Reserved for future timeout handling - when batch should be processed
+    #[allow(dead_code)]
     deadline: Instant,
     created_at: Instant,
 }
@@ -276,6 +280,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn sample_request(id: i64) -> McpRequest {
         McpRequest {
             jsonrpc: "2.0".to_string(),
@@ -285,6 +290,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn sample_response() -> McpResponse {
         McpResponse {
             jsonrpc: "2.0".to_string(),

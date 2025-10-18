@@ -1,22 +1,31 @@
 //! Unit tests for TUI module
 
-use super::*;
 use crate::config::Config;
+use crate::tui::app::{
+    CacheLayerStats, CacheStats, LogEntry, LogLevel, MetricsSnapshot, RequestEntry, ServerInfo,
+    ServerStatus, TuiApp,
+};
+use crate::tui::tabs::TabId;
+use chrono::Utc;
 use std::sync::Arc;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tui::app::{
-        CacheLayerStats, CacheStats, LogEntry, LogLevel, MetricsSnapshot, RequestEntry, ServerInfo,
-        ServerStatus, TuiApp,
-    };
-    use crate::tui::tabs::TabId;
-    use chrono::Utc;
+fn create_test_config() -> Arc<Config> {
+    Arc::new(Config::default())
+}
 
-    fn create_test_config() -> Arc<Config> {
-        Arc::new(Config::default())
+impl TuiApp {
+    /// Add a log entry to the buffer (rate-limited)
+    pub fn add_log_entry(&mut self, entry: LogEntry) {
+        self.log_buffer.push(entry);
+        if self.log_buffer.len() > 1000 {
+            self.log_buffer.remove(0); // Keep last 1000 (ring buffer)
+        }
     }
+}
+
+#[cfg(test)]
+mod tui_tests {
+    use super::*;
 
     #[test]
     fn test_tab_navigation_next() {
@@ -342,7 +351,7 @@ mod tests {
     #[test]
     fn test_log_rate_limiting() {
         let mut app = TuiApp::new(create_test_config());
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Simulate 1000 logs in rapid succession
         for i in 0..1000 {
@@ -359,15 +368,5 @@ mod tests {
 
         // In production, rate limiting would drop logs if >100/s
         // This is a mock test showing buffer constraint
-    }
-}
-
-impl TuiApp {
-    /// Add a log entry to the buffer (rate-limited)
-    pub fn add_log_entry(&mut self, entry: LogEntry) {
-        self.log_buffer.push(entry);
-        if self.log_buffer.len() > 1000 {
-            self.log_buffer.remove(0); // Keep last 1000 (ring buffer)
-        }
     }
 }

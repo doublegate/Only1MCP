@@ -123,12 +123,12 @@ impl Config {
         }
 
         // Validate batching config
-        if self.context_optimization.batching.enabled {
-            if self.context_optimization.batching.max_batch_size == 0 {
-                return Err(Error::Config(
-                    "batching max_batch_size must be non-zero".to_string(),
-                ));
-            }
+        if self.context_optimization.batching.enabled
+            && self.context_optimization.batching.max_batch_size == 0
+        {
+            return Err(Error::Config(
+                "batching max_batch_size must be non-zero".to_string(),
+            ));
         }
 
         Ok(())

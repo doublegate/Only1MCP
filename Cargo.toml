@@ -1,6 +1,6 @@
 [package]
 name = "only1mcp"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Only1MCP Team"]
 description = "The Ultimate MCP Server Aggregator - A unified proxy for Model Context Protocol servers"
@@ -131,6 +131,10 @@ which = "6.0"
 # TUI (Terminal User Interface)
 ratatui = "0.26"
 crossterm = "0.27"
+
+[features]
+default = ["metrics"]
+metrics = []  # Prometheus metrics collection (enabled by default)
 
 [dev-dependencies]
 tokio-test = "0.4"
