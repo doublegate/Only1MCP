@@ -8,6 +8,9 @@ mod metrics;
 mod tabs;
 mod ui;
 
+#[cfg(test)]
+mod tests;
+
 pub use app::{run_tui, LogEntry, LogLevel, MetricsSnapshot, ServerInfo, ServerStatus, TuiApp};
 pub use event::Event;
 pub use metrics::scrape_metrics;

@@ -16,6 +16,8 @@ pub struct TuiApp {
     // Data snapshots (updated via channels)
     pub metrics_snapshot: MetricsSnapshot,
     pub servers_snapshot: Vec<ServerInfo>,
+    pub request_log: Vec<RequestEntry>,
+    pub cache_stats: CacheStats,
     pub log_buffer: Vec<LogEntry>,
 
     // UI state
@@ -33,6 +35,8 @@ impl TuiApp {
             active_tab: TabId::Overview,
             metrics_snapshot: MetricsSnapshot::default(),
             servers_snapshot: Vec::new(),
+            request_log: Vec::new(),
+            cache_stats: CacheStats::default(),
             log_buffer: Vec::new(),
             scroll_offset: 0,
             filter_query: String::new(),
@@ -60,11 +64,11 @@ impl TuiApp {
             (KeyCode::Char('5'), _) => self.active_tab = TabId::Logs,
             (KeyCode::Up, _) => self.scroll_up(),
             (KeyCode::Down, _) => self.scroll_down(),
-            _ => {}
+            _ => {},
         }
     }
 
-    fn next_tab(&mut self) {
+    pub fn next_tab(&mut self) {
         self.active_tab = match self.active_tab {
             TabId::Overview => TabId::Servers,
             TabId::Servers => TabId::Requests,
@@ -75,11 +79,11 @@ impl TuiApp {
         self.scroll_offset = 0; // Reset scroll on tab change
     }
 
-    fn scroll_up(&mut self) {
+    pub fn scroll_up(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
     }
 
-    fn scroll_down(&mut self) {
+    pub fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_add(1);
     }
 }
@@ -97,10 +101,7 @@ pub async fn run_tui(
     Ok(())
 }
 
-fn run_tui_blocking(
-    config: Arc<Config>,
-    event_rx: mpsc::UnboundedReceiver<Event>,
-) -> Result<()> {
+fn run_tui_blocking(config: Arc<Config>, event_rx: mpsc::UnboundedReceiver<Event>) -> Result<()> {
     let mut event_rx = event_rx;
     use crossterm::{
         event::{DisableMouseCapture, EnableMouseCapture},
@@ -132,9 +133,8 @@ fn run_tui_blocking(
         if crossterm::event::poll(tick_duration)
             .map_err(|e| crate::error::Error::Server(format!("Event poll error: {}", e)))?
         {
-            if let crossterm::event::Event::Key(key) =
-                crossterm::event::read()
-                    .map_err(|e| crate::error::Error::Server(format!("Event read error: {}", e)))?
+            if let crossterm::event::Event::Key(key) = crossterm::event::read()
+                .map_err(|e| crate::error::Error::Server(format!("Event read error: {}", e)))?
             {
                 app.on_key(key);
             }
@@ -145,19 +145,19 @@ fn run_tui_blocking(
             match event {
                 Event::MetricsUpdate(snapshot) => {
                     app.metrics_snapshot = snapshot;
-                }
+                },
                 Event::ServersUpdate(servers) => {
                     app.servers_snapshot = servers;
-                }
+                },
                 Event::LogMessage(entry) => {
                     app.log_buffer.push(entry);
                     if app.log_buffer.len() > 1000 {
                         app.log_buffer.remove(0); // Keep last 1000
                     }
-                }
+                },
                 Event::Quit => {
                     app.should_quit = true;
-                }
+                },
             }
         }
 
@@ -169,7 +169,8 @@ fn run_tui_blocking(
     }
 
     // Cleanup terminal
-    disable_raw_mode().map_err(|e| crate::error::Error::Server(format!("Terminal error: {}", e)))?;
+    disable_raw_mode()
+        .map_err(|e| crate::error::Error::Server(format!("Terminal error: {}", e)))?;
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
@@ -207,7 +208,7 @@ pub struct ServerInfo {
     pub requests_per_second: u32,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ServerStatus {
     Up,
     Degraded,
@@ -221,11 +222,37 @@ pub struct LogEntry {
     pub message: String,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum LogLevel {
     Trace,
     Debug,
     Info,
     Warn,
     Error,
+}
+
+#[derive(Clone)]
+pub struct RequestEntry {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub method: String,
+    pub server_id: String,
+    pub latency_ms: f64,
+    pub status_code: u16,
+}
+
+#[derive(Default, Clone)]
+pub struct CacheStats {
+    pub l1: CacheLayerStats,
+    pub l2: CacheLayerStats,
+    pub l3: CacheLayerStats,
+}
+
+#[derive(Default, Clone)]
+pub struct CacheLayerStats {
+    pub name: String,
+    pub current_entries: usize,
+    pub max_entries: usize,
+    pub hit_rate: f64,
+    pub ttl_seconds: u64,
+    pub evictions: u64,
 }

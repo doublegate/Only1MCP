@@ -6,7 +6,7 @@ pub mod overview;
 pub mod requests;
 pub mod servers;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum TabId {
     Overview,
     Servers,

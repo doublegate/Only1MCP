@@ -11,11 +11,11 @@ pub fn draw(f: &mut Frame, area: Rect, app: &TuiApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Uptime + Status
-            Constraint::Length(4),  // Requests/sec sparkline
-            Constraint::Length(3),  // Latency percentiles
-            Constraint::Length(3),  // Servers + Cache
-            Constraint::Length(3),  // Error rate + Batches
+            Constraint::Length(3), // Uptime + Status
+            Constraint::Length(4), // Requests/sec sparkline
+            Constraint::Length(3), // Latency percentiles
+            Constraint::Length(3), // Servers + Cache
+            Constraint::Length(3), // Error rate + Batches
         ])
         .split(area);
 
@@ -40,7 +40,10 @@ fn draw_uptime_status(f: &mut Frame, area: Rect, app: &TuiApp) {
         Span::raw("Uptime: "),
         Span::styled(uptime, Style::default().fg(Color::Cyan)),
         Span::raw("          Status: "),
-        Span::styled(status.0, Style::default().fg(status.1).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            status.0,
+            Style::default().fg(status.1).add_modifier(Modifier::BOLD),
+        ),
     ]))
     .block(Block::default().borders(Borders::ALL).title("Overview"));
 
@@ -53,12 +56,10 @@ fn draw_requests_sparkline(f: &mut Frame, area: Rect, app: &TuiApp) {
     let data: Vec<u64> = vec![10, 12, 15, 18, 22, 25, 28, 30, 32, 35, 38, 40];
 
     let sparkline = Sparkline::default()
-        .block(
-            Block::default().borders(Borders::ALL).title(format!(
-                "Requests/sec: {:.1}",
-                app.metrics_snapshot.requests_per_second
-            )),
-        )
+        .block(Block::default().borders(Borders::ALL).title(format!(
+            "Requests/sec: {:.1}",
+            app.metrics_snapshot.requests_per_second
+        )))
         .data(&data)
         .style(Style::default().fg(Color::Green));
 

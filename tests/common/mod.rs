@@ -32,6 +32,7 @@ pub fn test_config_with_port(port: u16) -> Config {
         context_optimization: Default::default(),
         auth: Default::default(),
         observability: Default::default(),
+        tui: Default::default(),
     }
 }
 
@@ -78,6 +79,7 @@ pub fn test_config_with_backends(port: u16, backend_urls: Vec<String>) -> Config
         context_optimization: Default::default(),
         auth: Default::default(),
         observability: Default::default(),
+        tui: Default::default(),
     }
 }
 

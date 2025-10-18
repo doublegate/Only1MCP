@@ -36,13 +36,7 @@ pub fn draw(f: &mut Frame, app: &TuiApp) {
 }
 
 fn draw_tabs(f: &mut Frame, area: Rect, app: &TuiApp) {
-    let titles = vec![
-        "1:Overview",
-        "2:Servers",
-        "3:Requests",
-        "4:Cache",
-        "5:Logs",
-    ];
+    let titles = vec!["1:Overview", "2:Servers", "3:Requests", "4:Cache", "5:Logs"];
 
     let selected = match app.active_tab {
         TabId::Overview => 0,
@@ -56,11 +50,7 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &TuiApp) {
         .block(Block::default().borders(Borders::ALL).title("Only1MCP TUI"))
         .select(selected)
         .style(Style::default().fg(Color::White))
-        .highlight_style(
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        );
+        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
 
     f.render_widget(tabs, area);
 }
