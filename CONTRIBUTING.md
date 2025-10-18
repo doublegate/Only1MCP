@@ -125,13 +125,37 @@ perf: optimize request batching algorithm
 - Aim for high test coverage
 - Test edge cases and error conditions
 
+### Running Benchmarks
+
+Before submitting performance-related PRs, run benchmarks to validate changes:
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Save baseline before changes
+cargo bench -- --save-baseline before-changes
+
+# Make your changes...
+
+# Compare against baseline
+cargo bench -- --baseline before-changes
+```
+
+**Performance Regression Guidelines**:
+- <5% regression: Generally acceptable (document reason in PR)
+- 5-10% regression: Needs justification and approval
+- >10% regression: **Not acceptable** without strong justification
+
+See [Performance Benchmarking Guide](docs/performance_benchmarking.md) for comprehensive documentation.
+
 ### Performance
 
 - Profile before optimizing
 - Document performance-critical sections
 - Use appropriate data structures
 - Minimize allocations in hot paths
-- Benchmark significant changes
+- Benchmark significant changes (use `cargo bench`)
 
 ### Security
 
