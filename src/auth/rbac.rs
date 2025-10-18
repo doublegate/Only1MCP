@@ -132,14 +132,12 @@ pub struct TimeRestriction {
 }
 
 /// Resource quotas for rate limiting
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResourceQuotas {
     pub max_requests_per_hour: Option<u32>,
     pub max_tokens_per_day: Option<u64>,
     pub max_cost_per_month: Option<f64>,
 }
-
 
 /// Authorization context for policy evaluation
 #[derive(Debug, Clone, Serialize, Deserialize)]

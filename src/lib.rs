@@ -4,6 +4,7 @@
 //! This library can be embedded in other applications.
 
 pub mod auth;
+pub mod batching;
 pub mod cache;
 pub mod config;
 pub mod error;

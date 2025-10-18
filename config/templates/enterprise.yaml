@@ -207,24 +207,24 @@ proxy:
 
 # Context Optimization
 context_optimization:
-  enabled: true
-  strategies:
-    - request_batching
-    - response_caching
-    - tool_deduplication
-    - schema_compression
-  cache:
-    backend: redis
-    redis_url: redis://redis.company.com:6379
-    ttl: 3600
-    max_size: 10GB
-    compression: true
-    encryption: true
+  # Request batching - aggregate similar requests
   batching:
-    enabled: true
-    window: 100ms
-    max_batch_size: 50
-    timeout: 500ms
+    enabled: true  # Highly recommended for enterprise (hundreds of concurrent users)
+
+    # Time window to collect requests (milliseconds)
+    window_ms: 50  # Lower latency for enterprise SLAs
+
+    # Maximum requests per batch
+    max_batch_size: 50  # Much higher for enterprise scale
+
+    # Methods that support batching (list methods benefit most)
+    methods:
+      - tools/list
+      - resources/list
+      - prompts/list
+
+    # Enterprise note: Batching can reduce backend calls by 70-95% at scale
+    # 50ms batching latency is acceptable for most enterprise workloads
   compression:
     enabled: true
     algorithms:

@@ -1,13 +1,13 @@
 //! Configuration hot-reload implementation using notify and arc-swap
 
+use arc_swap::ArcSwap;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebouncedEvent, Debouncer, FileIdMap};
-use arc_swap::ArcSwap;
-use std::sync::Arc;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -143,11 +143,9 @@ impl ConfigLoader {
                         for event in events {
                             if event.paths.contains(&config_path) {
                                 debug!("Config file changed: {:?}", event.kind);
-                                if let Err(e) = Self::reload_config_internal(
-                                    &config_path,
-                                    &config,
-                                    &reload_tx,
-                                ) {
+                                if let Err(e) =
+                                    Self::reload_config_internal(&config_path, &config, &reload_tx)
+                                {
                                     error!("Failed to reload config: {}", e);
 
                                     // Update error metrics
@@ -159,15 +157,16 @@ impl ConfigLoader {
                                 }
                             }
                         }
-                    }
+                    },
                     Err(errors) => {
                         for e in errors {
                             error!("File watcher error: {}", e);
                         }
-                    }
+                    },
                 }
             },
-        ).map_err(|e| Error::Config(format!("Failed to create file watcher: {}", e)))?;
+        )
+        .map_err(|e| Error::Config(format!("Failed to create file watcher: {}", e)))?;
 
         // Watch the config file
         debouncer
@@ -263,7 +262,10 @@ impl ConfigLoader {
         // Notify subscribers (they'll receive Arc<Config> without copying data)
         let _ = reload_tx.send(new_config_arc);
 
-        info!("Configuration reloaded successfully from: {}", path.display());
+        info!(
+            "Configuration reloaded successfully from: {}",
+            path.display()
+        );
 
         // Update metrics
         #[cfg(feature = "metrics")]
@@ -298,11 +300,7 @@ impl ConfigLoader {
     /// # }
     /// ```
     pub fn reload(&self) -> Result<()> {
-        Self::reload_config_internal(
-            &self.config_path,
-            &self.config,
-            &self.reload_tx,
-        )
+        Self::reload_config_internal(&self.config_path, &self.config, &self.reload_tx)
     }
 }
 
@@ -341,10 +339,7 @@ servers: []
 "#;
         fs::write(&temp_file, initial_config).unwrap();
 
-        let loader = ConfigLoader::new(temp_file.path().to_path_buf())
-            .unwrap()
-            .watch()
-            .unwrap();
+        let loader = ConfigLoader::new(temp_file.path().to_path_buf()).unwrap().watch().unwrap();
 
         let mut reload_rx = loader.subscribe();
 
@@ -384,10 +379,7 @@ servers: []
 "#;
         fs::write(&temp_file, initial_config).unwrap();
 
-        let loader = ConfigLoader::new(temp_file.path().to_path_buf())
-            .unwrap()
-            .watch()
-            .unwrap();
+        let loader = ConfigLoader::new(temp_file.path().to_path_buf()).unwrap().watch().unwrap();
 
         let config_before = loader.get_config();
 
@@ -422,10 +414,7 @@ servers: []
 "#;
         fs::write(&temp_file, initial_config).unwrap();
 
-        let loader = ConfigLoader::new(temp_file.path().to_path_buf())
-            .unwrap()
-            .watch()
-            .unwrap();
+        let loader = ConfigLoader::new(temp_file.path().to_path_buf()).unwrap().watch().unwrap();
 
         let mut reload_rx1 = loader.subscribe();
         let mut reload_rx2 = loader.subscribe();

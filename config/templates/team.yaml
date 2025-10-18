@@ -136,6 +136,27 @@ cache:
     include_headers: false
     include_auth: true  # Per-user caching
 
+# Context Optimization
+context_optimization:
+  # Request batching - aggregate similar requests
+  batching:
+    enabled: true  # Enabled for team workloads (many concurrent requests)
+
+    # Time window to collect requests (milliseconds)
+    window_ms: 100
+
+    # Maximum requests per batch
+    max_batch_size: 20  # Higher for team concurrency
+
+    # Methods that support batching (list methods benefit most)
+    methods:
+      - tools/list
+      - resources/list
+      - prompts/list
+
+    # Note: With team workloads, batching can reduce backend calls by 60-80%
+    # 100ms latency is negligible when backend response time is 200-500ms
+
 # Security - API key authentication
 auth:
   enabled: true

@@ -7,7 +7,10 @@ use only1mcp::{
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use wiremock::{matchers::{method, path}, Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 /// Helper to create test health check config
 fn test_health_config() -> HealthCheckConfig {
@@ -63,7 +66,10 @@ async fn test_http_health_check_success() {
     // Verify health status
     let status = checker.get_status().await;
     assert_eq!(status.state, HealthState::Healthy);
-    assert!(status.success_count >= 2, "Expected at least 2 successful checks");
+    assert!(
+        status.success_count >= 2,
+        "Expected at least 2 successful checks"
+    );
     assert_eq!(status.failure_count, 0);
 
     // Stop health checker
@@ -106,7 +112,10 @@ async fn test_http_health_check_failure() {
     // Verify health status shows unhealthy
     let status = checker.get_status().await;
     assert_eq!(status.state, HealthState::Unhealthy);
-    assert!(status.failure_count >= 2, "Expected at least 2 failed checks");
+    assert!(
+        status.failure_count >= 2,
+        "Expected at least 2 failed checks"
+    );
 
     // Stop health checker
     checker.stop();
@@ -309,9 +318,7 @@ async fn test_health_metrics_recorded() {
     ));
 
     // Get initial metric values
-    let initial_total = HEALTH_CHECK_TOTAL
-        .with_label_values(&["test-metrics", "success"])
-        .get();
+    let initial_total = HEALTH_CHECK_TOTAL.with_label_values(&["test-metrics", "success"]).get();
 
     // Start health checking
     let checker_clone = checker.clone();
@@ -323,9 +330,7 @@ async fn test_health_metrics_recorded() {
     sleep(Duration::from_secs(3)).await;
 
     // Verify metrics increased
-    let final_total = HEALTH_CHECK_TOTAL
-        .with_label_values(&["test-metrics", "success"])
-        .get();
+    let final_total = HEALTH_CHECK_TOTAL.with_label_values(&["test-metrics", "success"]).get();
 
     assert!(
         final_total > initial_total,
@@ -333,11 +338,12 @@ async fn test_health_metrics_recorded() {
     );
 
     // Verify health status gauge is set to 1 (healthy)
-    let health_status = SERVER_HEALTH_STATUS
-        .with_label_values(&["test-metrics"])
-        .get();
+    let health_status = SERVER_HEALTH_STATUS.with_label_values(&["test-metrics"]).get();
 
-    assert_eq!(health_status, 1.0, "Expected health status gauge to be 1.0 (healthy)");
+    assert_eq!(
+        health_status, 1.0,
+        "Expected health status gauge to be 1.0 (healthy)"
+    );
 
     // Stop health checker
     checker.stop();

@@ -197,7 +197,9 @@ impl LayeredCache {
 
     /// Get total cache size across all layers.
     fn total_size(&self) -> u64 {
-        self.l1_tools.entry_count() + self.l2_resources.entry_count() + self.l3_prompts.entry_count()
+        self.l1_tools.entry_count()
+            + self.l2_resources.entry_count()
+            + self.l3_prompts.entry_count()
     }
 
     /// Check if a request should be cached.

@@ -12,8 +12,7 @@ pub mod validation;
 
 pub use loader::ConfigLoader;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     #[serde(default)]
     pub server: ServerConfig,
@@ -177,10 +176,21 @@ pub struct CacheConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BatchingConfig {
+    /// Enable or disable request batching (default: false for backward compatibility)
     #[serde(default)]
     pub enabled: bool,
+
+    /// Time window in milliseconds to collect requests (default: 100ms)
+    #[serde(default = "default_batch_window_ms")]
+    pub window_ms: u64,
+
+    /// Maximum number of requests in a batch before forcing flush (default: 10)
     #[serde(default = "default_max_batch_size")]
     pub max_batch_size: usize,
+
+    /// Whitelist of methods that support batching (default: list methods)
+    #[serde(default = "default_batch_methods")]
+    pub methods: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -255,7 +265,17 @@ fn default_ttl_seconds() -> u64 {
     300
 }
 fn default_max_batch_size() -> usize {
-    50
+    10
+}
+fn default_batch_window_ms() -> u64 {
+    100
+}
+fn default_batch_methods() -> Vec<String> {
+    vec![
+        "tools/list".to_string(),
+        "resources/list".to_string(),
+        "prompts/list".to_string(),
+    ]
 }
 fn default_log_level() -> String {
     "info".to_string()
@@ -321,7 +341,9 @@ impl Default for BatchingConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            window_ms: default_batch_window_ms(),
             max_batch_size: default_max_batch_size(),
+            methods: default_batch_methods(),
         }
     }
 }
@@ -386,4 +408,3 @@ impl Config {
         Ok(())
     }
 }
-

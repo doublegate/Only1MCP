@@ -198,6 +198,33 @@ lazy_static! {
         "Total number of cache evictions"
     ).unwrap();
 
+    // Batching metrics (Feature 4)
+    pub static ref BATCH_REQUESTS_TOTAL: prometheus::IntCounter = prometheus::register_int_counter!(
+        "only1mcp_batch_requests_total",
+        "Total number of requests submitted to batching"
+    ).unwrap();
+
+    pub static ref BATCH_SIZE: prometheus::Histogram = prometheus::register_histogram!(
+        prometheus::histogram_opts!(
+            "only1mcp_batch_size",
+            "Distribution of batch sizes (number of requests per batch)",
+            vec![1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 50.0]
+        )
+    ).unwrap();
+
+    pub static ref BATCH_WAIT_TIME_SECONDS: prometheus::Histogram = prometheus::register_histogram!(
+        prometheus::histogram_opts!(
+            "only1mcp_batch_wait_time_seconds",
+            "Time requests wait in batch before processing",
+            vec![0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.5]
+        )
+    ).unwrap();
+
+    pub static ref BATCHING_EFFICIENCY_RATIO: prometheus::Gauge = prometheus::register_gauge!(
+        "only1mcp_batching_efficiency_ratio",
+        "Batching efficiency ratio: backend_calls / total_requests (lower is better)"
+    ).unwrap();
+
     // Registry for all metrics
     pub static ref REGISTRY: Registry = {
         let registry = Registry::new();
@@ -223,6 +250,10 @@ lazy_static! {
         registry.register(Box::new(CACHE_MISSES_TOTAL.clone())).unwrap();
         registry.register(Box::new(CACHE_SIZE_ENTRIES.clone())).unwrap();
         registry.register(Box::new(CACHE_EVICTIONS_TOTAL.clone())).unwrap();
+        registry.register(Box::new(BATCH_REQUESTS_TOTAL.clone())).unwrap();
+        registry.register(Box::new(BATCH_SIZE.clone())).unwrap();
+        registry.register(Box::new(BATCH_WAIT_TIME_SECONDS.clone())).unwrap();
+        registry.register(Box::new(BATCHING_EFFICIENCY_RATIO.clone())).unwrap();
         registry
     };
 }

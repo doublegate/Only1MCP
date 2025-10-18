@@ -83,6 +83,25 @@ cache:
   l3:
     enabled: false
 
+# Request Batching - aggregates similar requests
+batching:
+  enabled: false  # Disabled by default (enable for high-traffic scenarios)
+
+  # Time window to collect requests (milliseconds)
+  window_ms: 100
+
+  # Maximum requests per batch
+  max_batch_size: 10
+
+  # Methods that support batching (list methods benefit most)
+  methods:
+    - tools/list
+    - resources/list
+    - prompts/list
+
+  # Note: Batching adds 0-100ms latency but reduces backend calls by 50-70%
+  # Enable if you have multiple clients requesting similar data
+
 # Security - minimal for local development
 auth:
   enabled: false  # No auth for local development

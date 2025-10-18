@@ -24,6 +24,7 @@ use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLay
 use tracing::info;
 
 use crate::{
+    batching::BatchAggregator,
     cache::ResponseCache,
     config::Config,
     error::{Error, Result},
@@ -32,6 +33,7 @@ use crate::{
         handler::{handle_jsonrpc_request, handle_websocket_upgrade},
         router::ServerRegistry,
     },
+    types::McpRequest,
 };
 
 /// Main proxy server structure containing all shared state and configuration.
@@ -58,6 +60,7 @@ pub struct AppState {
     pub metrics: Arc<Metrics>,
     pub http_transport: Option<Arc<crate::transport::http::HttpTransportPool>>,
     pub stdio_transport: Option<Arc<crate::transport::stdio::StdioTransport>>,
+    pub batch_aggregator: Arc<BatchAggregator>,
 }
 
 impl ProxyServer {
@@ -77,9 +80,7 @@ impl ProxyServer {
         // Initialize shared application state
         let registry = Arc::new(RwLock::new(ServerRegistry::from_config(&config).await?));
 
-        let cache = Arc::new(ResponseCache::new(
-            crate::cache::CacheConfig::default(),
-        ));
+        let cache = Arc::new(ResponseCache::new(crate::cache::CacheConfig::default()));
 
         let metrics = Arc::new(Metrics::new());
 
@@ -112,6 +113,80 @@ impl ProxyServer {
             None
         };
 
+        // Initialize BatchAggregator with backend caller
+        let batch_config = self.config.context_optimization.batching.clone();
+        let batch_aggregator = {
+            let http_transport_clone = http_transport.clone();
+            let stdio_transport_clone = stdio_transport.clone();
+            let config_clone = self.config.clone();
+
+            Arc::new(BatchAggregator::new(batch_config).with_backend_caller(
+                move |server_id: String, request: McpRequest| {
+                    // Find server config
+                    let server_config = config_clone
+                        .servers
+                        .iter()
+                        .find(|s| s.id == server_id)
+                        .ok_or_else(|| Error::ServerNotFound(server_id.clone()))?;
+
+                    // Send via appropriate transport (synchronous wrapper around async)
+                    let response = match &server_config.transport {
+                        crate::config::TransportConfig::Http { url, .. } => {
+                            let http_transport =
+                                http_transport_clone.as_ref().ok_or_else(|| {
+                                    Error::Transport("HTTP transport not initialized".into())
+                                })?;
+
+                            // Use tokio runtime to block on async operation
+                            tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(async {
+                                    http_transport
+                                        .send_request(url, request.clone())
+                                        .await
+                                        .map_err(|e| Error::Transport(e.to_string()))
+                                })
+                            })?
+                        },
+                        crate::config::TransportConfig::Stdio { command, args, env } => {
+                            let stdio_transport =
+                                stdio_transport_clone.as_ref().ok_or_else(|| {
+                                    Error::Transport("STDIO transport not initialized".into())
+                                })?;
+
+                            let stdio_config = crate::transport::stdio::StdioConfig {
+                                command: command.clone(),
+                                args: args.clone(),
+                                env: env.clone(),
+                                cwd: None,
+                                timeout_ms: 30000,
+                                max_memory_mb: Some(512),
+                                max_cpu_percent: Some(50),
+                                sandbox: true,
+                            };
+
+                            tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(async {
+                                    stdio_transport
+                                        .send_request_with_config(
+                                            server_id.clone(),
+                                            &stdio_config,
+                                            request.clone(),
+                                        )
+                                        .await
+                                        .map_err(|e| Error::Transport(e.to_string()))
+                                })
+                            })?
+                        },
+                        crate::config::TransportConfig::Sse { .. } => {
+                            return Err(Error::Transport("SSE not yet implemented".into()));
+                        },
+                    };
+
+                    Ok(response)
+                },
+            ))
+        };
+
         // Create shared application state
         let app_state = AppState {
             config: self.config.clone(),
@@ -120,6 +195,7 @@ impl ProxyServer {
             metrics: self.metrics.clone(),
             http_transport,
             stdio_transport,
+            batch_aggregator,
         };
 
         // Build main MCP protocol routes
@@ -215,7 +291,10 @@ impl ProxyServer {
         use crate::config::ConfigLoader;
 
         // Create config loader with hot-reload
-        info!("Enabling configuration hot-reload for: {}", config_path.display());
+        info!(
+            "Enabling configuration hot-reload for: {}",
+            config_path.display()
+        );
         let loader = ConfigLoader::new(config_path)?.watch()?;
 
         let config = loader.get_config();
@@ -241,8 +320,7 @@ impl ProxyServer {
         });
 
         // Run server (we need to extract it from Arc)
-        let server_owned = Arc::try_unwrap(server)
-            .unwrap_or_else(|arc| (*arc).clone());
+        let server_owned = Arc::try_unwrap(server).unwrap_or_else(|arc| (*arc).clone());
         server_owned.run().await
     }
 

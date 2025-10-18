@@ -197,12 +197,8 @@ impl HttpConnection {
     pub async fn send(&self, request: McpRequest) -> Result<McpResponse, HttpError> {
         self.request_count.fetch_add(1, Ordering::Relaxed);
 
-        let response = self
-            .client
-            .post(format!("{}/mcp", self.base_url))
-            .json(&request)
-            .send()
-            .await?;
+        let response =
+            self.client.post(format!("{}/mcp", self.base_url)).json(&request).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();

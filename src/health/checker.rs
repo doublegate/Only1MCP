@@ -164,7 +164,11 @@ impl HealthChecker {
     }
 
     /// Create a new health checker (legacy method using local HealthCheckConfig)
-    pub fn new(backend_id: String, transport: HealthCheckTransport, config: HealthCheckConfig) -> Self {
+    pub fn new(
+        backend_id: String,
+        transport: HealthCheckTransport,
+        config: HealthCheckConfig,
+    ) -> Self {
         Self {
             backend_id,
             transport,
@@ -174,10 +178,7 @@ impl HealthChecker {
             failure_threshold: config.failure_threshold,
             success_threshold: config.success_threshold,
             status: Arc::new(RwLock::new(HealthStatus::new())),
-            http_client: reqwest::Client::builder()
-                .timeout(config.timeout)
-                .build()
-                .unwrap(),
+            http_client: reqwest::Client::builder().timeout(config.timeout).build().unwrap(),
             circuit_breaker: None,
             shutdown: Arc::new(AtomicBool::new(false)),
         }
@@ -215,10 +216,10 @@ impl HealthChecker {
         match &self.transport {
             HealthCheckTransport::Http { endpoint } => {
                 self.perform_http_check(endpoint, start).await
-            }
+            },
             HealthCheckTransport::Stdio { command, args } => {
                 self.perform_stdio_check(command, args, start).await
-            }
+            },
         }
     }
 
@@ -271,7 +272,7 @@ impl HealthChecker {
                         _latency: Some(latency),
                     }
                 }
-            }
+            },
             Err(e) => {
                 let latency = start.elapsed();
 
@@ -285,7 +286,7 @@ impl HealthChecker {
                     },
                     _latency: Some(latency),
                 }
-            }
+            },
         }
     }
 
@@ -331,7 +332,7 @@ impl HealthChecker {
                         details: None,
                     }
                 }
-            }
+            },
             Ok(Err(e)) => HealthCheckResult::Failure {
                 reason: format!("Failed to spawn process: {}", e),
                 _latency: Some(start.elapsed()),
@@ -352,9 +353,7 @@ impl HealthChecker {
         match result {
             HealthCheckResult::Success { latency, details } => {
                 // Record successful check
-                HEALTH_CHECK_TOTAL
-                    .with_label_values(&[&self.backend_id, "success"])
-                    .inc();
+                HEALTH_CHECK_TOTAL.with_label_values(&[&self.backend_id, "success"]).inc();
 
                 status.last_success = Instant::now();
                 status.success_count += 1;
@@ -386,16 +385,19 @@ impl HealthChecker {
                     cb.record_outcome(&self.backend_id, true).await;
 
                     // Reset circuit breaker when transitioning to healthy
-                    if previous_state != HealthState::Healthy && status.state == HealthState::Healthy {
+                    if previous_state != HealthState::Healthy
+                        && status.state == HealthState::Healthy
+                    {
                         cb.reset(&self.backend_id).await;
                     }
                 }
             },
-            HealthCheckResult::Failure { reason, _latency: _ } => {
+            HealthCheckResult::Failure {
+                reason,
+                _latency: _,
+            } => {
                 // Record failed check
-                HEALTH_CHECK_TOTAL
-                    .with_label_values(&[&self.backend_id, "failure"])
-                    .inc();
+                HEALTH_CHECK_TOTAL.with_label_values(&[&self.backend_id, "failure"]).inc();
 
                 status.last_failure = Some(Instant::now());
                 status.failure_count += 1;
@@ -428,7 +430,9 @@ impl HealthChecker {
                     cb.record_outcome(&self.backend_id, false).await;
 
                     // Trip circuit breaker when transitioning to unhealthy
-                    if previous_state != HealthState::Unhealthy && status.state == HealthState::Unhealthy {
+                    if previous_state != HealthState::Unhealthy
+                        && status.state == HealthState::Unhealthy
+                    {
                         cb.trip(&self.backend_id).await;
                     }
                 }
@@ -445,9 +449,7 @@ impl HealthChecker {
 
         // Record health status gauge (0 = unhealthy, 1 = healthy)
         let health_value = if status.state.is_healthy() { 1.0 } else { 0.0 };
-        SERVER_HEALTH_STATUS
-            .with_label_values(&[&self.backend_id])
-            .set(health_value);
+        SERVER_HEALTH_STATUS.with_label_values(&[&self.backend_id]).set(health_value);
 
         // Record latency
         HEALTH_CHECK_DURATION_SECONDS
@@ -498,10 +500,7 @@ impl PassiveHealthMonitor {
 
     /// Record request outcome for passive monitoring
     pub async fn record_request(&self, backend_id: &str, success: bool, latency: Duration) {
-        let stats = self
-            .request_stats
-            .entry(backend_id.to_string())
-            .or_default();
+        let stats = self.request_stats.entry(backend_id.to_string()).or_default();
 
         stats.record(success, latency);
 

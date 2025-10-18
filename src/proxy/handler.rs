@@ -68,14 +68,45 @@ async fn handle_tools_list_impl(
         return Err(ProxyError::NoBackendAvailable("No healthy servers".into()));
     }
 
-    // Parallel fetch from all servers
+    // Parallel fetch from all servers (with optional batching)
     let mut tasks = Vec::new();
     for server in servers {
         let state = state.clone();
         let request = request.clone();
 
         tasks.push(tokio::spawn(async move {
-            fetch_tools_from_server(state, server, request).await
+            // Check if batching is enabled for this method
+            if state.config.context_optimization.batching.enabled
+                && state.config.context_optimization.batching.methods.contains(&request.method)
+            {
+                // Route through BatchAggregator
+                debug!(
+                    "Routing tools/list through batch aggregator for server: {}",
+                    server
+                );
+                state.batch_aggregator.submit_request(server.clone(), request).await.and_then(
+                    |response| {
+                        // Parse response and extract tools array
+                        let result = response.result.ok_or_else(|| {
+                            Error::Server("No result in tools/list response".into())
+                        })?;
+
+                        let tools_value = result
+                            .get("tools")
+                            .ok_or_else(|| Error::Server("No tools field in response".into()))?;
+
+                        let tools: Vec<Tool> = serde_json::from_value(tools_value.clone())
+                            .map_err(|e| {
+                                Error::Serialization(format!("Failed to parse tools: {}", e))
+                            })?;
+
+                        Ok(tools)
+                    },
+                )
+            } else {
+                // Direct backend call (existing path)
+                fetch_tools_from_server(state, server, request).await
+            }
         }));
     }
 
@@ -199,9 +230,45 @@ async fn handle_resources_list_impl(
 
     let mut all_resources = Vec::new();
     for server in servers {
-        match fetch_resources_from_server(&state, server, request.clone()).await {
-            Ok(resources) => all_resources.extend(resources),
-            Err(e) => warn!("Failed to fetch resources: {}", e),
+        // Check if batching is enabled for this method
+        if state.config.context_optimization.batching.enabled
+            && state.config.context_optimization.batching.methods.contains(&request.method)
+        {
+            // Route through BatchAggregator
+            debug!(
+                "Routing resources/list through batch aggregator for server: {}",
+                server
+            );
+            match state
+                .batch_aggregator
+                .submit_request(server.clone(), request.clone())
+                .await
+                .and_then(|response| {
+                    // Parse response and extract resources array
+                    let result = response.result.ok_or_else(|| {
+                        Error::Server("No result in resources/list response".into())
+                    })?;
+
+                    let resources_value = result
+                        .get("resources")
+                        .ok_or_else(|| Error::Server("No resources field in response".into()))?;
+
+                    let resources: Vec<Resource> = serde_json::from_value(resources_value.clone())
+                        .map_err(|e| {
+                            Error::Serialization(format!("Failed to parse resources: {}", e))
+                        })?;
+
+                    Ok(resources)
+                }) {
+                Ok(resources) => all_resources.extend(resources),
+                Err(e) => warn!("Failed to fetch resources: {}", e),
+            }
+        } else {
+            // Direct backend call (existing path)
+            match fetch_resources_from_server(&state, server, request.clone()).await {
+                Ok(resources) => all_resources.extend(resources),
+                Err(e) => warn!("Failed to fetch resources: {}", e),
+            }
         }
     }
 
@@ -321,9 +388,45 @@ async fn handle_prompts_list_impl(
 
     let mut all_prompts = Vec::new();
     for server in servers {
-        match fetch_prompts_from_server(&state, server, request.clone()).await {
-            Ok(prompts) => all_prompts.extend(prompts),
-            Err(e) => warn!("Failed to fetch prompts: {}", e),
+        // Check if batching is enabled for this method
+        if state.config.context_optimization.batching.enabled
+            && state.config.context_optimization.batching.methods.contains(&request.method)
+        {
+            // Route through BatchAggregator
+            debug!(
+                "Routing prompts/list through batch aggregator for server: {}",
+                server
+            );
+            match state
+                .batch_aggregator
+                .submit_request(server.clone(), request.clone())
+                .await
+                .and_then(|response| {
+                    // Parse response and extract prompts array
+                    let result = response.result.ok_or_else(|| {
+                        Error::Server("No result in prompts/list response".into())
+                    })?;
+
+                    let prompts_value = result
+                        .get("prompts")
+                        .ok_or_else(|| Error::Server("No prompts field in response".into()))?;
+
+                    let prompts: Vec<Prompt> = serde_json::from_value(prompts_value.clone())
+                        .map_err(|e| {
+                            Error::Serialization(format!("Failed to parse prompts: {}", e))
+                        })?;
+
+                    Ok(prompts)
+                }) {
+                Ok(prompts) => all_prompts.extend(prompts),
+                Err(e) => warn!("Failed to fetch prompts: {}", e),
+            }
+        } else {
+            // Direct backend call (existing path)
+            match fetch_prompts_from_server(&state, server, request.clone()).await {
+                Ok(prompts) => all_prompts.extend(prompts),
+                Err(e) => warn!("Failed to fetch prompts: {}", e),
+            }
         }
     }
 

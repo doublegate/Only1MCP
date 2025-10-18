@@ -11,7 +11,7 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     #[error("Configuration error: {0}")]
     Config(String),
@@ -47,16 +47,16 @@ pub enum Error {
     Server(String),
 
     #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    Io(String),
 
     #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error),
+    Json(String),
 
     #[error("YAML error: {0}")]
-    Yaml(#[from] serde_yaml::Error),
+    Yaml(String),
 
     #[error("HTTP error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(String),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -190,5 +190,30 @@ impl From<crate::proxy::router::RoutingError> for ProxyError {
 impl From<Error> for ProxyError {
     fn from(err: Error) -> Self {
         ProxyError::Core(err)
+    }
+}
+
+// From impls for converting non-Clone errors to Error
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::Io(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Json(err.to_string())
+    }
+}
+
+impl From<serde_yaml::Error> for Error {
+    fn from(err: serde_yaml::Error) -> Self {
+        Error::Yaml(err.to_string())
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error::Http(err.to_string())
     }
 }

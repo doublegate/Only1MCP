@@ -279,8 +279,7 @@ impl RequestRouter {
         let hash = hasher.finish();
 
         // Find the server in the ring
-        let server =
-            hash_ring.get_server(hash, servers).ok_or(RoutingError::HashRingEmpty)?;
+        let server = hash_ring.get_server(hash, servers).ok_or(RoutingError::HashRingEmpty)?;
 
         debug!("Consistent hash selected: {} for key: {}", server, key);
         Ok(server.clone())
@@ -372,10 +371,7 @@ impl RequestRouter {
 
     /// Update health state based on request outcome.
     pub async fn update_health(&self, server_id: &ServerId, success: bool, latency: Duration) {
-        let mut health = self
-            .health_states
-            .entry(server_id.clone())
-            .or_default();
+        let mut health = self.health_states.entry(server_id.clone()).or_default();
 
         if success {
             health.record_success(latency);
@@ -535,7 +531,10 @@ impl ServerRegistry {
     }
 
     /// Add a server to the registry (used during hot-reload)
-    pub async fn add_server(&mut self, server_config: crate::config::McpServerConfig) -> std::result::Result<(), Error> {
+    pub async fn add_server(
+        &mut self,
+        server_config: crate::config::McpServerConfig,
+    ) -> std::result::Result<(), Error> {
         let info = ServerInfo {
             id: server_config.id.clone(),
             weight: server_config.weight,

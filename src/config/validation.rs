@@ -1,7 +1,7 @@
 //! Configuration validation logic
 
-use crate::error::{Error, Result};
 use crate::config::Config;
+use crate::error::{Error, Result};
 
 impl Config {
     /// Validate configuration
@@ -12,16 +12,22 @@ impl Config {
         }
 
         if self.server.max_connections == 0 {
-            return Err(Error::Config("max_connections must be non-zero".to_string()));
+            return Err(Error::Config(
+                "max_connections must be non-zero".to_string(),
+            ));
         }
 
         // Validate TLS config
         if self.server.tls.enabled {
             if self.server.tls.cert_path.is_none() {
-                return Err(Error::Config("TLS enabled but cert_path not specified".to_string()));
+                return Err(Error::Config(
+                    "TLS enabled but cert_path not specified".to_string(),
+                ));
             }
             if self.server.tls.key_path.is_none() {
-                return Err(Error::Config("TLS enabled but key_path not specified".to_string()));
+                return Err(Error::Config(
+                    "TLS enabled but key_path not specified".to_string(),
+                ));
             }
         }
 
@@ -35,10 +41,16 @@ impl Config {
                 return Err(Error::Config("Server ID cannot be empty".to_string()));
             }
             if server.name.is_empty() {
-                return Err(Error::Config(format!("Server {} has empty name", server.id)));
+                return Err(Error::Config(format!(
+                    "Server {} has empty name",
+                    server.id
+                )));
             }
             if server.weight == 0 {
-                return Err(Error::Config(format!("Server {} has zero weight", server.id)));
+                return Err(Error::Config(format!(
+                    "Server {} has zero weight",
+                    server.id
+                )));
             }
 
             // Validate health check config
@@ -65,12 +77,17 @@ impl Config {
         }
 
         // Validate load balancer config
-        let valid_algorithms = ["round_robin", "least_connections", "consistent_hash", "random", "weighted_random"];
+        let valid_algorithms = [
+            "round_robin",
+            "least_connections",
+            "consistent_hash",
+            "random",
+            "weighted_random",
+        ];
         if !valid_algorithms.contains(&self.proxy.load_balancer.algorithm.as_str()) {
             return Err(Error::Config(format!(
                 "Invalid load balancer algorithm: {}. Valid options: {:?}",
-                self.proxy.load_balancer.algorithm,
-                valid_algorithms
+                self.proxy.load_balancer.algorithm, valid_algorithms
             )));
         }
 
@@ -80,29 +97,37 @@ impl Config {
 
         // Validate connection pool config
         if self.proxy.connection_pool.max_per_backend == 0 {
-            return Err(Error::Config("max_per_backend must be non-zero".to_string()));
+            return Err(Error::Config(
+                "max_per_backend must be non-zero".to_string(),
+            ));
         }
 
         if self.proxy.connection_pool.min_idle > self.proxy.connection_pool.max_per_backend {
             return Err(Error::Config(
-                "min_idle cannot be greater than max_per_backend".to_string()
+                "min_idle cannot be greater than max_per_backend".to_string(),
             ));
         }
 
         // Validate cache config
         if self.context_optimization.cache.enabled {
             if self.context_optimization.cache.max_entries == 0 {
-                return Err(Error::Config("cache max_entries must be non-zero".to_string()));
+                return Err(Error::Config(
+                    "cache max_entries must be non-zero".to_string(),
+                ));
             }
             if self.context_optimization.cache.ttl_seconds == 0 {
-                return Err(Error::Config("cache ttl_seconds must be non-zero".to_string()));
+                return Err(Error::Config(
+                    "cache ttl_seconds must be non-zero".to_string(),
+                ));
             }
         }
 
         // Validate batching config
         if self.context_optimization.batching.enabled {
             if self.context_optimization.batching.max_batch_size == 0 {
-                return Err(Error::Config("batching max_batch_size must be non-zero".to_string()));
+                return Err(Error::Config(
+                    "batching max_batch_size must be non-zero".to_string(),
+                ));
             }
         }
 

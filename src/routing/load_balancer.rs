@@ -351,7 +351,8 @@ impl LoadBalancer {
 
         let mut rng = rand::thread_rng();
         servers
-            .choose(&mut rng).cloned()
+            .choose(&mut rng)
+            .cloned()
             .ok_or_else(|| crate::error::Error::NoBackendAvailable("".to_string()))
     }
 
@@ -386,9 +387,7 @@ impl LoadBalancer {
     /// Add a server to the load balancer
     pub fn add_server(&self, server_id: &ServerId) {
         // Initialize health state
-        self.health_states
-            .entry(server_id.clone())
-            .or_default();
+        self.health_states.entry(server_id.clone()).or_default();
 
         // Add to consistent hash ring if using that algorithm
         if self.config.algorithm == RoutingAlgorithm::ConsistentHash {
@@ -425,10 +424,7 @@ impl LoadBalancer {
 
     /// Update health state for a server
     pub fn update_health(&self, server_id: &ServerId, success: bool, latency: Duration) {
-        let health = self
-            .health_states
-            .entry(server_id.clone())
-            .or_default();
+        let health = self.health_states.entry(server_id.clone()).or_default();
 
         if success {
             health.record_success(latency);
