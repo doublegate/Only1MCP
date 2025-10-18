@@ -151,11 +151,29 @@ panic = "abort"
 
 [profile.bench]
 inherits = "release"
+debug = true  # Enable debug symbols for profiling
 
 [[bin]]
 name = "only1mcp"
 path = "src/main.rs"
 
-# [[bench]]
-# name = "proxy_benchmark"
-# harness = false
+# Benchmark suites
+[[bench]]
+name = "load_balancing"
+harness = false
+
+[[bench]]
+name = "caching"
+harness = false
+
+[[bench]]
+name = "batching"
+harness = false
+
+[[bench]]
+name = "end_to_end"
+harness = false
+
+[[bench]]
+name = "transport"
+harness = false
