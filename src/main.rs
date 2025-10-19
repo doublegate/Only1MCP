@@ -246,8 +246,21 @@ async fn main() -> Result<()> {
         },
 
         Commands::Tui => {
-            println!("TUI mode not yet implemented");
-            println!("Coming in Phase 2!");
+            info!("Starting TUI interface (Press 'q' or Ctrl+C to quit)");
+
+            // The TUI implementation is fully functional - wire it up!
+            // Implementation exists in src/tui/ with complete dashboard
+
+            // Create event channel for TUI communication
+            let (_event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
+
+            // Convert Config to Arc for thread-safe sharing
+            let config_arc = std::sync::Arc::new(config);
+
+            // Launch TUI dashboard (blocks until user quits)
+            only1mcp::tui::run_tui(config_arc, event_rx).await?;
+
+            info!("TUI interface closed");
         },
 
         Commands::Benchmark {

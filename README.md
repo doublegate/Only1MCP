@@ -3,13 +3,13 @@
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-61%2F61%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-113%2F113%20passing-brightgreen.svg)]()
 [![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
 [![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 
-> **Status**: 🎉 Phase 2 Complete! All 6 features implemented, tested, and validated (Configuration Hot-Reload, Active Health Checking, Response Caching, Request Batching, TUI Interface, Performance Benchmarking) - 100% test pass rate (61/61) - SSE transport and Context7 integration added!
+> **Status**: 🎉 Phase 2 Complete! All 6 features implemented, tested, and validated (Configuration Hot-Reload, Active Health Checking, Response Caching, Request Batching, TUI Interface, Performance Benchmarking) - 100% test pass rate (113/113) - SSE transport and Context7 integration added!
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
@@ -45,9 +45,10 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 **Testing & Quality**
 
-- ✅ **61/61 Tests Passing** - 100% test success rate achieved
-- 🧪 **27 Integration Tests** - Server startup, health monitoring, error handling, SSE transport (6)
-- 🔬 **34 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE (9)
+- ✅ **113/113 Tests Passing** - 100% test success rate achieved
+- 🧪 **45 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, TUI interface
+- 🔬 **61 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE, TUI
+- 📚 **7 Doc Tests** - Inline code examples verified
 - 📝 **8,000+ Lines Documentation** - Comprehensive guides, API references, and implementation details
 
 **Supported Transports**
@@ -149,7 +150,7 @@ cargo build --release
 # Run tests to verify installation
 cargo test
 
-# Expected output: 100 tests passing (100% pass rate)
+# Expected output: 113 tests passing (100% pass rate)
 ```
 
 ### Running the Proxy
@@ -456,7 +457,7 @@ cargo run -- tui
 
 **Started**: October 17, 2025
 **Completed**: October 18, 2025
-**Test Count**: 27 → 100 (100% passing)
+**Test Count**: 27 → 113 (100% passing)
 **Performance**: All targets validated ✅
 
 **Completed Features**:
@@ -520,7 +521,7 @@ cargo run -- tui
 
 **Phase 2 Summary**:
 - ✅ 6/6 features complete
-- ✅ 100/100 tests passing (100% pass rate)
+- ✅ 113/113 tests passing (100% pass rate, includes 7 doc tests)
 - ✅ All performance targets validated
 - ✅ Comprehensive documentation (2,000+ new lines)
 - ✅ Production-ready for advanced deployments
@@ -619,7 +620,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 - [x] Request batching (time-window aggregation, deduplication, >50% call reduction)
 - [x] TUI interface (ratatui 0.26, 5 tabs, 21+ keyboard shortcuts)
 - [x] Performance benchmarking (Criterion.rs, 24 benchmarks, all targets validated)
-- [x] 100/100 tests passing (100% pass rate, 73 new tests added)
+- [x] 113/113 tests passing (100% pass rate, 86 new tests added including 7 doc tests)
 
 ### Phase 3: Enterprise Features 🎯 Next (Target: Weeks 9-12)
 - [ ] Advanced RBAC with dynamic policies (time-based, resource-based)
