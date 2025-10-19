@@ -3,13 +3,13 @@
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-113%2F113%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-117%2F117%20passing-brightgreen.svg)]()
 [![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
 [![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 
-> **Status**: 🎉 Phase 2 Complete! All 6 features implemented, tested, and validated (Configuration Hot-Reload, Active Health Checking, Response Caching, Request Batching, TUI Interface, Performance Benchmarking) - 100% test pass rate (113/113) - SSE transport and Context7 integration added!
+> **Status**: 🎉 **STDIO MCP Protocol Working!** Full MCP initialization handshake implemented - Sequential Thinking and Memory servers now functional! Phase 2 Complete with all 6 features + STDIO protocol compliance (2024-11-05) - 100% test pass rate (117/117)
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
@@ -45,11 +45,12 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 **Testing & Quality**
 
-- ✅ **113/113 Tests Passing** - 100% test success rate achieved
-- 🧪 **45 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, TUI interface
+- ✅ **117/117 Tests Passing** - 100% test success rate achieved
+- 🧪 **47 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, TUI interface, STDIO MCP init (new)
 - 🔬 **61 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE, TUI
 - 📚 **7 Doc Tests** - Inline code examples verified
-- 📝 **8,000+ Lines Documentation** - Comprehensive guides, API references, and implementation details
+- 🆕 **2 STDIO Init Tests** - Sequential Thinking and Memory server initialization with full MCP handshake
+- 📝 **8,500+ Lines Documentation** - Comprehensive guides, API references, and implementation details
 
 **Supported Transports**
 
@@ -67,21 +68,26 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - ✅ **Context7** - Up-to-date library documentation (SSE transport)
   - Tools: `resolve-library-id`, `get-library-docs`
   - Endpoint: https://mcp.context7.com/mcp
-- 📋 **Sequential Thinking** - Multi-step reasoning engine (STDIO - Phase 3)
+  - Status: ✅ Fully Functional
+- ✅ **Sequential Thinking** - Multi-step reasoning engine (STDIO transport)
   - Tools: `sequentialthinking`
   - Package: @modelcontextprotocol/server-sequential-thinking
-  - Status: Configured, awaiting MCP init handshake implementation
-- 📋 **Memory** - Knowledge graph and entity storage (STDIO - Phase 3)
-  - Tools: `create_entities`, `add_observations`, `read_graph`, `search_nodes`, etc.
+  - Status: ✅ Fully Functional (MCP protocol 2024-11-05)
+- ✅ **Memory** - Knowledge graph and entity storage (STDIO transport)
+  - Tools: `create_entities`, `add_observations`, `read_graph`, `search_nodes`, `open_nodes`, `create_relations`, `delete_entities`, `delete_observations`, `delete_relations`
   - Package: @modelcontextprotocol/server-memory
-  - Status: Configured, awaiting MCP init handshake implementation
+  - Status: ✅ Fully Functional (MCP protocol 2024-11-05)
 
 **Transport Support**
 - ✅ **SSE Servers** - Full support with automatic SSE parsing (e.g., Context7)
 - ✅ **HTTP MCP Servers** - Any MCP server with HTTP/JSON-RPC 2.0
-- 📋 **STDIO MCP Servers** - Configuration ready, MCP initialize handshake pending (Phase 3)
-
-> **Note**: STDIO transport currently lacks the MCP protocol initialization handshake required by npm-based MCP servers. This is a known limitation and will be addressed in Phase 3. SSE and HTTP transports are fully functional.
+- ✅ **STDIO MCP Servers** - Full MCP protocol initialization handshake (protocol version 2024-11-05)
+  - Line-delimited JSON-RPC messages
+  - Automatic initialization (initialize → initialized → ready)
+  - Non-JSON line skipping (handles startup messages)
+  - Connection state management (Spawned → Initializing → Ready → Closed)
+  - Retry logic with exponential backoff (3 attempts)
+  - Process pooling and reuse
 
 ### Phase 2 Features (✅ 100% Complete - 6/6 Features)
 

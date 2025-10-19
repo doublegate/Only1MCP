@@ -1,18 +1,19 @@
 //! STDIO transport implementation for local MCP servers.
 //!
 //! Manages process spawning, bidirectional communication through pipes,
-//! and security sandboxing for untrusted MCP servers.
+//! MCP protocol initialization handshake, and security sandboxing.
 
 use crate::error::Result;
 use crate::types::{McpRequest, McpResponse, ServerId};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -42,6 +43,63 @@ pub enum TransportError {
 
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("MCP protocol error: {0}")]
+    ProtocolError(String),
+
+    #[error("Initialization failed: {0}")]
+    InitializationFailed(String),
+
+    #[error("Invalid server response: {0}")]
+    InvalidResponse(String),
+
+    #[error("Connection not initialized")]
+    NotInitialized,
+
+    #[error("Connection in invalid state: {0:?}")]
+    InvalidState(StdioConnectionState),
+}
+
+/// Connection lifecycle states for MCP STDIO servers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StdioConnectionState {
+    /// Process spawned, not yet initialized
+    Spawned,
+    /// Initialize request sent, waiting for response
+    Initializing,
+    /// Initialized and ready for requests
+    Ready,
+    /// Connection closed or failed
+    Closed,
+}
+
+/// Server capabilities returned during MCP initialization.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ServerCapabilities {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompts: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub experimental: Option<serde_json::Value>,
+}
+
+impl ServerCapabilities {
+    pub fn supports_tools(&self) -> bool {
+        self.tools.is_some()
+    }
+
+    pub fn supports_resources(&self) -> bool {
+        self.resources.is_some()
+    }
+
+    pub fn supports_prompts(&self) -> bool {
+        self.prompts.is_some()
+    }
 }
 
 /// Configuration for STDIO transport.
@@ -80,10 +138,16 @@ impl Default for StdioConfig {
     }
 }
 
-/// STDIO transport handler managing process lifecycle.
+/// STDIO transport handler managing process lifecycle and MCP protocol.
 pub struct StdioTransport {
     /// Active STDIO processes
     processes: Arc<DashMap<ServerId, Arc<StdioProcess>>>,
+    /// Connection state per server
+    connection_states: Arc<DashMap<ServerId, StdioConnectionState>>,
+    /// Server capabilities per server (from initialize response)
+    server_capabilities: Arc<DashMap<ServerId, ServerCapabilities>>,
+    /// Initialization locks per server (prevent concurrent init)
+    init_locks: Arc<DashMap<ServerId, Arc<Mutex<()>>>>,
     /// Process metrics
     metrics: Arc<ProcessMetrics>,
 }
@@ -99,8 +163,152 @@ impl StdioTransport {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(DashMap::new()),
+            connection_states: Arc::new(DashMap::new()),
+            server_capabilities: Arc::new(DashMap::new()),
+            init_locks: Arc::new(DashMap::new()),
             metrics: Arc::new(ProcessMetrics::default()),
         }
+    }
+
+    /// Perform MCP protocol initialization handshake with a STDIO server.
+    async fn initialize_connection(
+        &self,
+        server_id: &str,
+        process: &StdioProcess,
+    ) -> std::result::Result<ServerCapabilities, TransportError> {
+        info!("Initializing MCP connection for server: {}", server_id);
+
+        // Step 1: Send initialize request
+        let init_request = json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "roots": {
+                        "listChanged": true
+                    },
+                    "sampling": {}
+                },
+                "clientInfo": {
+                    "name": "Only1MCP",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        });
+
+        process.send_json(&init_request).await?;
+        debug!("Sent initialize request to {}", server_id);
+
+        // Step 2: Read initialize response with timeout
+        let init_response = tokio::time::timeout(
+            Duration::from_secs(30),
+            process.receive_json()
+        )
+        .await
+        .map_err(|_| TransportError::InitializationFailed("Timeout waiting for initialize response".into()))??;
+
+        // Step 3: Validate response
+        if init_response.get("jsonrpc") != Some(&json!("2.0")) {
+            return Err(TransportError::ProtocolError("Invalid JSON-RPC version".into()));
+        }
+
+        let result = init_response.get("result")
+            .ok_or_else(|| TransportError::InvalidResponse("Missing result field".into()))?;
+
+        let protocol_version = result.get("protocolVersion")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| TransportError::ProtocolError("Missing protocolVersion".into()))?;
+
+        if protocol_version != "2024-11-05" {
+            warn!("Server {} using different protocol version: {}", server_id, protocol_version);
+        }
+
+        // Step 4: Extract server capabilities
+        let capabilities = result.get("capabilities")
+            .ok_or_else(|| TransportError::InvalidResponse("Missing capabilities".into()))?;
+        let server_capabilities: ServerCapabilities = serde_json::from_value(capabilities.clone())?;
+
+        // Step 5: Log server info
+        if let Some(server_info) = result.get("serverInfo") {
+            info!(
+                "Server {} initialized: {} v{}",
+                server_id,
+                server_info.get("name").and_then(|n| n.as_str()).unwrap_or("unknown"),
+                server_info.get("version").and_then(|v| v.as_str()).unwrap_or("unknown")
+            );
+        }
+
+        // Step 6: Send initialized notification
+        let initialized_notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+
+        process.send_json(&initialized_notification).await?;
+        debug!("Sent initialized notification to {}", server_id);
+
+        Ok(server_capabilities)
+    }
+
+    /// Initialize a STDIO connection with full MCP handshake (with retries).
+    async fn initialize_stdio_connection(
+        &self,
+        server_id: &str,
+        config: &StdioConfig,
+    ) -> std::result::Result<(), TransportError> {
+        // Set state to Initializing
+        self.connection_states.insert(
+            server_id.to_string(),
+            StdioConnectionState::Initializing,
+        );
+
+        // Perform handshake with retry logic
+        let mut attempts = 0;
+        const MAX_RETRIES: u32 = 3;
+
+        let capabilities = loop {
+            // Spawn new process for this attempt (or get existing healthy one)
+            let process = self.get_or_create_process(server_id.to_string(), config).await?;
+
+            match self.initialize_connection(server_id, &process).await {
+                Ok(caps) => break caps,
+                Err(e) if attempts < MAX_RETRIES => {
+                    attempts += 1;
+                    warn!(
+                        "Initialization attempt {} failed for {}: {}. Retrying...",
+                        attempts, server_id, e
+                    );
+
+                    // Remove failed process so next attempt spawns a new one
+                    self.processes.remove(&server_id.to_string());
+
+                    tokio::time::sleep(Duration::from_millis(500 * attempts as u64)).await;
+                }
+                Err(e) => {
+                    self.connection_states.insert(
+                        server_id.to_string(),
+                        StdioConnectionState::Closed,
+                    );
+                    self.processes.remove(&server_id.to_string());
+                    self.metrics.init_failures.fetch_add(1, Ordering::Relaxed);
+                    return Err(e);
+                }
+            }
+        };
+
+        // Store capabilities
+        self.server_capabilities.insert(server_id.to_string(), capabilities);
+
+        // Update state to Ready
+        self.connection_states.insert(
+            server_id.to_string(),
+            StdioConnectionState::Ready,
+        );
+
+        info!("STDIO server {} initialized successfully", server_id);
+        Ok(())
     }
 
     /// Send a request to a STDIO MCP server with explicit config.
@@ -110,21 +318,49 @@ impl StdioTransport {
         config: &StdioConfig,
         request: McpRequest,
     ) -> std::result::Result<McpResponse, TransportError> {
-        // Get or create STDIO process
-        let process = self.get_or_create_process(server_id.clone(), config).await?;
+        // Check if connection needs initialization
+        let needs_init = {
+            let state = self.connection_states.get(&server_id);
+            state.map(|s| *s.value() != StdioConnectionState::Ready).unwrap_or(true)
+        };
 
-        // Send request through stdin
-        let request_bytes = serde_json::to_vec(&request)?;
-        process.send(request_bytes).await?;
+        if needs_init {
+            // Acquire initialization lock to prevent concurrent initialization
+            let init_lock = self.init_locks
+                .entry(server_id.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(())));
+            let _guard = init_lock.lock().await;
 
-        // Read response from stdout with timeout
-        let response_bytes =
-            tokio::time::timeout(Duration::from_millis(config.timeout_ms), process.receive())
-                .await
-                .map_err(|_| TransportError::Timeout)??;
+            // Double-check state after acquiring lock (another task may have initialized)
+            let state = self.connection_states.get(&server_id);
+            if state.map(|s| *s.value() != StdioConnectionState::Ready).unwrap_or(true) {
+                // Perform initialization
+                let start = std::time::Instant::now();
+                self.initialize_stdio_connection(&server_id, config).await?;
+                let duration = start.elapsed();
+                debug!("Initialization took {:?} for {}", duration, server_id);
+                self.metrics.init_duration_sum.fetch_add(duration.as_millis() as u64, Ordering::Relaxed);
+            }
+        }
+
+        // Get process
+        let process = self.processes.get(&server_id)
+            .ok_or_else(|| TransportError::ProcessUnhealthy)?;
+
+        // Send request as JSON-RPC
+        let request_json = serde_json::to_value(&request)?;
+        process.send_json(&request_json).await?;
+
+        // Read response with timeout
+        let response_json = tokio::time::timeout(
+            Duration::from_millis(config.timeout_ms),
+            process.receive_json()
+        )
+        .await
+        .map_err(|_| TransportError::Timeout)??;
 
         // Parse response
-        let response: McpResponse = serde_json::from_slice(&response_bytes)?;
+        let response: McpResponse = serde_json::from_value(response_json)?;
 
         self.metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
         Ok(response)
@@ -308,42 +544,80 @@ impl StdioProcess {
         }
     }
 
-    /// Send a message to the STDIO server.
-    pub async fn send(&self, data: Vec<u8>) -> std::result::Result<(), TransportError> {
+    /// Send a JSON-RPC message to the STDIO server (line-delimited JSON).
+    pub async fn send_json(&self, value: &serde_json::Value) -> std::result::Result<(), TransportError> {
         let mut stdin = self.stdin.lock().await;
 
-        // Write length-prefixed message (4 bytes length + data)
-        let len = data.len() as u32;
-        stdin.write_u32(len).await?;
-        stdin.write_all(&data).await?;
+        // Serialize to JSON and add newline (MCP STDIO uses line-delimited JSON)
+        let json_str = serde_json::to_string(value)?;
+        stdin.write_all(json_str.as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
         stdin.flush().await?;
 
-        debug!("Sent {} bytes to STDIO process", data.len());
+        debug!("Sent JSON-RPC message: {}", json_str.chars().take(100).collect::<String>());
         Ok(())
     }
 
-    /// Receive a message from the STDIO server.
-    pub async fn receive(&self) -> std::result::Result<Vec<u8>, TransportError> {
+    /// Receive a JSON-RPC message from the STDIO server (line-delimited JSON).
+    /// Skips non-JSON lines (like startup messages) until a valid JSON-RPC message is found.
+    pub async fn receive_json(&self) -> std::result::Result<serde_json::Value, TransportError> {
         let mut stdout = self.stdout.lock().await;
 
-        // Read length prefix
-        let len = stdout.read_u32().await?;
+        // Read lines until we find valid JSON
+        loop {
+            let mut line = String::new();
+            let bytes_read = stdout.read_line(&mut line).await?;
 
-        if len > 10_000_000 {
-            // Sanity check: reject messages larger than 10MB
-            error!("Received message too large: {} bytes", len);
-            return Err(TransportError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Message too large",
-            )));
+            if bytes_read == 0 {
+                return Err(TransportError::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "Connection closed",
+                )));
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                // Skip empty lines
+                continue;
+            }
+
+            // Try to parse as JSON
+            match serde_json::from_str::<serde_json::Value>(trimmed) {
+                Ok(value) if value.is_object() => {
+                    // Valid JSON object - check if it's JSON-RPC
+                    if value.get("jsonrpc").is_some() || value.get("method").is_some() || value.get("result").is_some() {
+                        debug!("Received JSON-RPC message: {}", trimmed.chars().take(100).collect::<String>());
+                        return Ok(value);
+                    } else {
+                        // Valid JSON but not JSON-RPC, skip
+                        debug!("Skipping non-JSON-RPC message: {}", trimmed.chars().take(50).collect::<String>());
+                        continue;
+                    }
+                }
+                Ok(_) => {
+                    // Valid JSON but not an object (array, string, etc), skip
+                    debug!("Skipping non-object JSON: {}", trimmed.chars().take(50).collect::<String>());
+                    continue;
+                }
+                Err(_) => {
+                    // Not valid JSON - likely a startup message or log
+                    debug!("Skipping non-JSON line: {}", trimmed.chars().take(50).collect::<String>());
+                    continue;
+                }
+            }
         }
+    }
 
-        // Read message data
-        let mut buffer = vec![0u8; len as usize];
-        stdout.read_exact(&mut buffer).await?;
+    /// Send a message to the STDIO server (legacy binary method - deprecated).
+    pub async fn send(&self, data: Vec<u8>) -> std::result::Result<(), TransportError> {
+        let value: serde_json::Value = serde_json::from_slice(&data)?;
+        self.send_json(&value).await
+    }
 
-        debug!("Received {} bytes from STDIO process", buffer.len());
-        Ok(buffer)
+    /// Receive a message from the STDIO server (legacy binary method - deprecated).
+    pub async fn receive(&self) -> std::result::Result<Vec<u8>, TransportError> {
+        let value = self.receive_json().await?;
+        Ok(serde_json::to_vec(&value)?)
     }
 
     /// Read any available stderr output (non-blocking).
@@ -414,14 +688,16 @@ impl StdioProcess {
     }
 }
 
-/// Metrics for STDIO processes.
+/// Metrics for STDIO processes and MCP initialization.
 #[derive(Default)]
 pub struct ProcessMetrics {
-    pub processes_spawned: std::sync::atomic::AtomicU64,
-    pub processes_killed: std::sync::atomic::AtomicU64,
-    pub requests_sent: std::sync::atomic::AtomicU64,
-    pub responses_received: std::sync::atomic::AtomicU64,
-    pub errors: std::sync::atomic::AtomicU64,
+    pub processes_spawned: AtomicU64,
+    pub processes_killed: AtomicU64,
+    pub requests_sent: AtomicU64,
+    pub responses_received: AtomicU64,
+    pub errors: AtomicU64,
+    pub init_failures: AtomicU64,
+    pub init_duration_sum: AtomicU64, // Total initialization time in milliseconds
 }
 
 impl Drop for StdioProcess {
