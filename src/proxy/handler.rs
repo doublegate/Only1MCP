@@ -577,14 +577,14 @@ async fn fetch_tools_from_server(
 
     // Send via appropriate transport
     let response = match &server_config.transport {
-        crate::config::TransportConfig::Http { url, .. } => {
+        crate::config::TransportConfig::Http { url, headers } => {
             let http_transport = state
                 .http_transport
                 .as_ref()
                 .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
 
             http_transport
-                .send_request(url, tools_request)
+                .send_request_with_headers(url, tools_request, headers.clone())
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
@@ -611,8 +611,16 @@ async fn fetch_tools_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::Sse { .. } => {
-            return Err(Error::Transport("SSE not yet implemented".into()));
+        crate::config::TransportConfig::Sse { url, headers } => {
+            let sse_transport = state
+                .sse_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("SSE transport not initialized".into()))?;
+
+            sse_transport
+                .send_request_with_headers(url, tools_request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
         },
     };
 
@@ -649,14 +657,14 @@ async fn fetch_resources_from_server(
 
     // Send via appropriate transport
     let response = match &server_config.transport {
-        crate::config::TransportConfig::Http { url, .. } => {
+        crate::config::TransportConfig::Http { url, headers } => {
             let http_transport = state
                 .http_transport
                 .as_ref()
                 .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
 
             http_transport
-                .send_request(url, resources_request)
+                .send_request_with_headers(url, resources_request, headers.clone())
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
@@ -682,8 +690,16 @@ async fn fetch_resources_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::Sse { .. } => {
-            return Err(Error::Transport("SSE not yet implemented".into()));
+        crate::config::TransportConfig::Sse { url, headers } => {
+            let sse_transport = state
+                .sse_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("SSE transport not initialized".into()))?;
+
+            sse_transport
+                .send_request_with_headers(url, resources_request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
         },
     };
 
@@ -720,14 +736,14 @@ async fn fetch_prompts_from_server(
 
     // Send via appropriate transport
     let response = match &server_config.transport {
-        crate::config::TransportConfig::Http { url, .. } => {
+        crate::config::TransportConfig::Http { url, headers } => {
             let http_transport = state
                 .http_transport
                 .as_ref()
                 .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
 
             http_transport
-                .send_request(url, prompts_request)
+                .send_request_with_headers(url, prompts_request, headers.clone())
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
@@ -753,8 +769,16 @@ async fn fetch_prompts_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::Sse { .. } => {
-            return Err(Error::Transport("SSE not yet implemented".into()));
+        crate::config::TransportConfig::Sse { url, headers } => {
+            let sse_transport = state
+                .sse_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("SSE transport not initialized".into()))?;
+
+            sse_transport
+                .send_request_with_headers(url, prompts_request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
         },
     };
 

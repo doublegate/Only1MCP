@@ -370,7 +370,7 @@ impl RegistryInner {
             TransportConfig::Http { url, .. } => {
                 (TransportType::Http, url.clone(), None, None, None)
             },
-            TransportConfig::Sse { url } => (TransportType::Sse, url.clone(), None, None, None),
+            TransportConfig::Sse { url, .. } => (TransportType::Sse, url.clone(), None, None, None),
         };
 
         let health_check = if mcp.health_check.enabled {

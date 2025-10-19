@@ -19,6 +19,7 @@ only1mcp.yaml
 only1mcp.toml
 /.only1mcp/
 !config/templates/
+solo.yaml
 
 # Logs
 *.log

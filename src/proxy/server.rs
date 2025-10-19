@@ -60,6 +60,7 @@ pub struct AppState {
     pub metrics: Arc<Metrics>,
     pub http_transport: Option<Arc<crate::transport::http::HttpTransportPool>>,
     pub stdio_transport: Option<Arc<crate::transport::stdio::StdioTransport>>,
+    pub sse_transport: Option<Arc<crate::transport::sse::SseTransportPool>>,
     pub batch_aggregator: Arc<BatchAggregator>,
 }
 
@@ -113,11 +114,25 @@ impl ProxyServer {
             None
         };
 
+        // Initialize SSE transport if any SSE servers are configured
+        let sse_transport = if self
+            .config
+            .servers
+            .iter()
+            .any(|s| matches!(s.transport, crate::config::TransportConfig::Sse { .. }))
+        {
+            let sse_config = crate::transport::sse::SseTransportConfig::default();
+            Some(Arc::new(crate::transport::sse::SseTransportPool::new(sse_config)))
+        } else {
+            None
+        };
+
         // Initialize BatchAggregator with backend caller
         let batch_config = self.config.context_optimization.batching.clone();
         let batch_aggregator = {
             let http_transport_clone = http_transport.clone();
             let stdio_transport_clone = stdio_transport.clone();
+            let sse_transport_clone = sse_transport.clone();
             let config_clone = self.config.clone();
 
             Arc::new(BatchAggregator::new(batch_config).with_backend_caller(
@@ -131,7 +146,7 @@ impl ProxyServer {
 
                     // Send via appropriate transport (synchronous wrapper around async)
                     let response = match &server_config.transport {
-                        crate::config::TransportConfig::Http { url, .. } => {
+                        crate::config::TransportConfig::Http { url, headers } => {
                             // Nesting required for: transport extraction → error handling
                             #[allow(clippy::excessive_nesting)]
                             let http_transport =
@@ -145,7 +160,7 @@ impl ProxyServer {
                             tokio::task::block_in_place(|| {
                                 tokio::runtime::Handle::current().block_on(async {
                                     http_transport
-                                        .send_request(url, request.clone())
+                                        .send_request_with_headers(url, request.clone(), headers.clone())
                                         .await
                                         .map_err(|e| Error::Transport(e.to_string()))
                                 })
@@ -185,8 +200,24 @@ impl ProxyServer {
                                 })
                             })?
                         },
-                        crate::config::TransportConfig::Sse { .. } => {
-                            return Err(Error::Transport("SSE not yet implemented".into()));
+                        crate::config::TransportConfig::Sse { url, headers } => {
+                            // Nesting required for: transport extraction → error handling
+                            #[allow(clippy::excessive_nesting)]
+                            let sse_transport =
+                                sse_transport_clone.as_ref().ok_or_else(|| {
+                                    Error::Transport("SSE transport not initialized".into())
+                                })?;
+
+                            // Nesting required for: block_in_place → block_on async runtime bridge
+                            #[allow(clippy::excessive_nesting)]
+                            tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(async {
+                                    sse_transport
+                                        .send_request_with_headers(url, request.clone(), headers.clone())
+                                        .await
+                                        .map_err(|e| Error::Transport(e.to_string()))
+                                })
+                            })?
                         },
                     };
 
@@ -203,6 +234,7 @@ impl ProxyServer {
             metrics: self.metrics.clone(),
             http_transport,
             stdio_transport,
+            sse_transport,
             batch_aggregator,
         };
 

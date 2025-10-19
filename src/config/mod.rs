@@ -83,6 +83,8 @@ pub enum TransportConfig {
     },
     Sse {
         url: String,
+        #[serde(default)]
+        headers: std::collections::HashMap<String, String>,
     },
 }
 

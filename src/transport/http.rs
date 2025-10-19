@@ -65,6 +65,9 @@ pub struct HttpTransportConfig {
 
     /// Enable compression
     pub compression: bool,
+
+    /// Custom HTTP headers
+    pub headers: std::collections::HashMap<String, String>,
 }
 
 impl Default for HttpTransportConfig {
@@ -77,6 +80,7 @@ impl Default for HttpTransportConfig {
             keep_alive: Duration::from_secs(90),
             max_connections_per_host: 10,
             compression: true,
+            headers: std::collections::HashMap::new(),
         }
     }
 }
@@ -91,6 +95,9 @@ pub struct HttpConnectionManager {
 
     /// Connection timeout
     timeout: Duration,
+
+    /// Custom HTTP headers
+    headers: std::collections::HashMap<String, String>,
 }
 
 impl HttpConnectionManager {
@@ -109,6 +116,7 @@ impl HttpConnectionManager {
             base_url: config.base_url,
             client,
             timeout: config.connection_timeout,
+            headers: config.headers,
         }
     }
 }
@@ -119,26 +127,30 @@ impl ManageConnection for HttpConnectionManager {
     type Error = HttpError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
-        // Test connection with health check
+        // Try health check, but don't fail if endpoint doesn't exist (404)
+        // Some MCP servers like Context7 don't have a /health endpoint
         let health_url = format!("{}/health", self.base_url);
 
-        let response = self
+        if let Ok(response) = self
             .client
             .get(&health_url)
             .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
-
-        if !response.status().is_success() {
-            return Err(HttpError::HealthCheckFailed(response.status()));
+        {
+            // If health endpoint exists but returns error (not 404), that's a problem
+            if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
+                return Err(HttpError::HealthCheckFailed(response.status()));
+            }
         }
+        // If health check fails entirely or returns 404, proceed anyway
 
         Ok(HttpConnection {
             base_url: self.base_url.clone(),
             client: self.client.clone(),
             created_at: Instant::now(),
             request_count: Arc::new(AtomicU64::new(0)),
+            headers: self.headers.clone(),
         })
     }
 
@@ -190,6 +202,9 @@ pub struct HttpConnection {
 
     /// Number of requests sent
     request_count: Arc<AtomicU64>,
+
+    /// Custom HTTP headers
+    headers: std::collections::HashMap<String, String>,
 }
 
 impl HttpConnection {
@@ -345,14 +360,19 @@ impl HttpTransport {
         // Record attempt
         self.metrics.request_count.fetch_add(1, Ordering::Relaxed);
 
-        // Send request
-        let result = conn
+        // Send request with custom headers
+        let mut request_builder = conn
             .client
             .post(endpoint)
             .json(&request)
-            .timeout(self.config.request_timeout)
-            .send()
-            .await;
+            .timeout(self.config.request_timeout);
+
+        // Apply custom headers from config
+        for (key, value) in &conn.headers {
+            request_builder = request_builder.header(key, value);
+        }
+
+        let result = request_builder.send().await;
 
         match result {
             Ok(response) => {
@@ -500,8 +520,72 @@ impl HttpTransportPool {
         endpoint: &str,
         request: crate::types::McpRequest,
     ) -> Result<crate::types::McpResponse, HttpError> {
+        self.send_request_with_headers(endpoint, request, std::collections::HashMap::new()).await
+    }
+
+    /// Send request to a specific endpoint with custom headers
+    pub async fn send_request_with_headers(
+        &self,
+        endpoint: &str,
+        request: crate::types::McpRequest,
+        headers: std::collections::HashMap<String, String>,
+    ) -> Result<crate::types::McpResponse, HttpError> {
+        // Get or create base transport
         let transport = self.get_or_create(endpoint).await?;
-        transport.send_request(endpoint, request).await
+
+        // If no headers provided, use existing transport logic
+        if headers.is_empty() {
+            return transport.send_request(endpoint, request).await;
+        }
+
+        // For requests with headers, we need to override the connection's headers
+        // This is a simplified approach - get pooled connection and send with custom headers
+        let start = Instant::now();
+
+        // Get pooled connection
+        let conn = transport.pool.get().await.map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
+
+        // Record attempt
+        transport.metrics.request_count.fetch_add(1, Ordering::Relaxed);
+
+        // Build request with custom headers
+        let mut request_builder = conn
+            .client
+            .post(endpoint)
+            .json(&request)
+            .timeout(transport.config.request_timeout);
+
+        // Apply custom headers (these override any default headers)
+        for (key, value) in &headers {
+            request_builder = request_builder.header(key, value);
+        }
+
+        let result = request_builder.send().await;
+
+        match result {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    transport.metrics.error_count.fetch_add(1, Ordering::Relaxed);
+                    return Err(HttpError::ServerError(format!("{}: {}", status, body)));
+                }
+
+                let mcp_response: crate::types::McpResponse = response
+                    .json()
+                    .await
+                    .map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
+
+                let elapsed = start.elapsed().as_micros() as u64;
+                transport.metrics.total_latency_us.fetch_add(elapsed, Ordering::Relaxed);
+
+                Ok(mcp_response)
+            }
+            Err(e) => {
+                transport.metrics.error_count.fetch_add(1, Ordering::Relaxed);
+                Err(e.into())
+            }
+        }
     }
 }
 
