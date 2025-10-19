@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-10-19 - MCP Server Configuration Expansion
+
+### Added - MCP Server Configurations
+
+#### Sequential Thinking MCP Server
+- **Package**: @modelcontextprotocol/server-sequential-thinking (npm)
+- **Transport**: STDIO configured (npx execution)
+- **Tools**: `sequentialthinking` - dynamic and reflective problem-solving through thought sequences
+- **Configuration**: Added to only1mcp.yaml with proper STDIO transport settings
+- **Status**: Configuration validated, server spawns correctly, awaiting MCP init handshake implementation
+
+#### Memory MCP Server (Knowledge Graph)
+- **Package**: @modelcontextprotocol/server-memory (npm)
+- **Transport**: STDIO configured (npx execution)
+- **Tools**: `create_entities`, `add_observations`, `read_graph`, `search_nodes`, `delete_entities`, `delete_relations`, `delete_observations`, `open_nodes`, `create_relations`
+- **Configuration**: Added to only1mcp.yaml with proper STDIO transport settings
+- **Status**: Configuration validated, server spawns correctly, awaiting MCP init handshake implementation
+
+### Changed - Configuration Management
+
+#### Removed
+- **solo.yaml**: Removed deprecated configuration file from project root
+  - References updated in documentation to use only1mcp.yaml
+  - Config templates in config/templates/ remain for reference
+
+#### Configuration File
+- **only1mcp.yaml**: Now contains 3 configured MCP servers (Context7, Sequential Thinking, Memory)
+- **Validation**: All configurations validated with `cargo run -- validate only1mcp.yaml`
+
+### Known Limitations
+
+#### STDIO Transport MCP Initialization
+- **Issue**: STDIO transport currently lacks the MCP protocol initialization handshake
+- **Impact**: npm-based MCP servers (Sequential Thinking, Memory) spawn correctly but cannot complete tool discovery
+- **Root Cause**: MCP protocol requires `initialize` request before `tools/list` can be sent
+- **Observation**: Servers spawn successfully (confirmed via debug logs), respond with "running on stdio" message
+- **Error**: "unexpected end of file" when sending tools/list without prior initialization
+- **Planned Fix**: Phase 3 - Implement full MCP protocol handshake in STDIO transport
+- **Workaround**: SSE and HTTP transports are fully functional (e.g., Context7 works perfectly)
+
+#### Debug Findings
+From server logs (RUST_LOG=debug):
+```
+INFO  only1mcp::transport::stdio: Spawned STDIO process for server sequential-thinking: npx
+INFO  only1mcp::transport::stdio: Spawned STDIO process for server memory: npx
+WARN  only1mcp::proxy::handler: Failed to fetch tools: Transport error: IO error: unexpected end of file
+```
+
+### Documentation Updates
+
+#### README.md
+- Added Sequential Thinking and Memory server details
+- Added STDIO transport limitation note
+- Updated "Integrated MCP Servers" section with detailed status
+- Clarified transport support status (SSE/HTTP: full, STDIO: partial)
+
+#### Configuration
+- Validated all 3 server configurations
+- Tested npx package availability (@modelcontextprotocol/server-sequential-thinking, @modelcontextprotocol/server-memory)
+- Confirmed both packages execute and report "running on stdio"
+
+### Testing
+
+#### Manual Validation
+- ✅ npx @modelcontextprotocol/server-sequential-thinking - "Sequential Thinking MCP Server running on stdio"
+- ✅ npx @modelcontextprotocol/server-memory - "Knowledge Graph MCP Server running on stdio"
+- ✅ cargo run -- validate only1mcp.yaml - Configuration valid
+- ✅ Server startup - 3 servers registered, health endpoint reports 3 servers
+- ✅ STDIO process spawning - Both servers spawn successfully
+- ❌ Tool discovery - Blocked by missing MCP init handshake
+
+### Future Work
+
+#### Phase 3 Priorities
+1. Implement MCP protocol initialization handshake for STDIO transport
+2. Add support for initialize/initialized message exchange
+3. Implement proper connection lifecycle management
+4. Add MCP capabilities negotiation
+5. Enable full STDIO server support (Sequential Thinking, Memory, and others)
+
+### Technical Details
+
+#### Configuration Format
+Both servers use consistent STDIO configuration pattern:
+```yaml
+- id: "sequential-thinking"
+  name: "Sequential Thinking MCP Server"
+  enabled: true
+  transport:
+    type: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    env: {}
+  health_check:
+    enabled: false
+  weight: 100
+```
+
+#### Research Sources
+- Sequential Thinking: github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+- Memory: github.com/modelcontextprotocol/servers/tree/main/src/memory
+- MCP Protocol: modelcontextprotocol.io
+- npm Packages: npmjs.com/@modelcontextprotocol
+
 ## [0.2.1] - 2025-10-19 - SSE Transport and Context7 Integration
 
 ### 🎉 SSE Transport Implementation Complete

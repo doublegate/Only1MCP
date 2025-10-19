@@ -21,39 +21,47 @@ proxy:
 
 # MCP Backend Servers
 servers:
-  - id: local-stdio
-    name: "Local STDIO MCP Server"
+  # Context7 - Up-to-date library documentation (SSE transport - WORKING)
+  - id: "context7"
+    name: "Context7 MCP Server"
     enabled: true
-    transport: stdio
-
-    # Command to execute
-    command: ["mcp-server"]
-    args: []
-
-    # Optional: working directory
-    # working_dir: /path/to/project
-
-    # Environment variables
-    env:
-      LOG_LEVEL: info
-      MCP_MODE: development
-
-    # Health check (minimal)
+    transport:
+      type: "sse"
+      url: "https://mcp.context7.com/mcp"
+      headers:
+        Accept: "application/json, text/event-stream"
+        Content-Type: "application/json"
     health_check:
-      enabled: false  # Disabled for local dev
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      enabled: false  # Context7 doesn't have a /health endpoint
+    weight: 100
 
-  # Example: Additional HTTP server
-  # - id: http-api
-  #   name: "HTTP API Server"
-  #   enabled: false
-  #   transport: http
-  #   endpoint: http://localhost:9001
+  # Sequential Thinking - Multi-step reasoning (STDIO - Phase 3)
+  # NOTE: STDIO transport lacks MCP init handshake, awaiting Phase 3 implementation
+  # - id: "sequential-thinking"
+  #   name: "Sequential Thinking MCP Server"
+  #   enabled: true
+  #   transport:
+  #     type: "stdio"
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+  #     env: {}
   #   health_check:
-  #     enabled: true
-  #     interval: 30s
+  #     enabled: false
+  #   weight: 100
+
+  # Memory - Knowledge graph storage (STDIO - Phase 3)
+  # NOTE: STDIO transport lacks MCP init handshake, awaiting Phase 3 implementation
+  # - id: "memory"
+  #   name: "Memory MCP Server (Knowledge Graph)"
+  #   enabled: true
+  #   transport:
+  #     type: "stdio"
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-memory"]
+  #     env: {}
+  #   health_check:
+  #     enabled: false
+  #   weight: 100
 
 # Routing configuration
 routing:

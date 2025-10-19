@@ -64,10 +64,24 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 **Integrated MCP Servers**
 
-- ✅ **Context7** - Up-to-date library documentation (resolve-library-id, get-library-docs tools)
-- ✅ **Custom HTTP MCP Servers** - Any MCP server with HTTP/JSON-RPC 2.0
-- ✅ **Custom STDIO MCP Servers** - Any local process-based MCP server
-- ✅ **Custom SSE MCP Servers** - Any SSE-based MCP server with text/event-stream format
+- ✅ **Context7** - Up-to-date library documentation (SSE transport)
+  - Tools: `resolve-library-id`, `get-library-docs`
+  - Endpoint: https://mcp.context7.com/mcp
+- 📋 **Sequential Thinking** - Multi-step reasoning engine (STDIO - Phase 3)
+  - Tools: `sequentialthinking`
+  - Package: @modelcontextprotocol/server-sequential-thinking
+  - Status: Configured, awaiting MCP init handshake implementation
+- 📋 **Memory** - Knowledge graph and entity storage (STDIO - Phase 3)
+  - Tools: `create_entities`, `add_observations`, `read_graph`, `search_nodes`, etc.
+  - Package: @modelcontextprotocol/server-memory
+  - Status: Configured, awaiting MCP init handshake implementation
+
+**Transport Support**
+- ✅ **SSE Servers** - Full support with automatic SSE parsing (e.g., Context7)
+- ✅ **HTTP MCP Servers** - Any MCP server with HTTP/JSON-RPC 2.0
+- 📋 **STDIO MCP Servers** - Configuration ready, MCP initialize handshake pending (Phase 3)
+
+> **Note**: STDIO transport currently lacks the MCP protocol initialization handshake required by npm-based MCP servers. This is a known limitation and will be addressed in Phase 3. SSE and HTTP transports are fully functional.
 
 ### Phase 2 Features (✅ 100% Complete - 6/6 Features)
 

@@ -177,6 +177,46 @@ servers:
         - "model/*"
       cost_weight: 10  # More expensive
 
+  # Context7 - Up-to-date library documentation (SSE - WORKING)
+  # - id: "context7"
+  #   name: "Context7 MCP Server"
+  #   enabled: true
+  #   transport:
+  #     type: "sse"
+  #     url: "https://mcp.context7.com/mcp"
+  #     headers:
+  #       Accept: "application/json, text/event-stream"
+  #       Content-Type: "application/json"
+  #   health_check:
+  #     enabled: false
+  #   weight: 100
+
+  # Sequential Thinking - Multi-step reasoning (STDIO - Phase 3)
+  # - id: "sequential-thinking"
+  #   name: "Sequential Thinking MCP Server"
+  #   enabled: true
+  #   transport:
+  #     type: "stdio"
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+  #     env: {}
+  #   health_check:
+  #     enabled: false
+  #   weight: 100
+
+  # Memory - Knowledge graph (STDIO - Phase 3)
+  # - id: "memory"
+  #   name: "Memory MCP Server"
+  #   enabled: true
+  #   transport:
+  #     type: "stdio"
+  #     command: "npx"
+  #     args: ["-y", "@modelcontextprotocol/server-memory"]
+  #     env: {}
+  #   health_check:
+  #     enabled: false
+  #   weight: 100
+
 # Proxy Configuration
 proxy:
   mode: high_availability
