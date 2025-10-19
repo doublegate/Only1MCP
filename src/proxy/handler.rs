@@ -622,6 +622,27 @@ async fn fetch_tools_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
+        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
+            let streamable_http_transport = state
+                .streamable_http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+
+            // Create transport config
+            let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
+                url: url.clone(),
+                headers: headers.clone(),
+                timeout_ms: *timeout_ms,
+            };
+
+            // Get or create transport (maintains session)
+            let transport = streamable_http_transport.get_or_create(transport_config);
+
+            transport
+                .send_request(tools_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
     };
 
     // Parse response and extract tools array
@@ -698,6 +719,25 @@ async fn fetch_resources_from_server(
 
             sse_transport
                 .send_request_with_headers(url, resources_request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
+            let streamable_http_transport = state
+                .streamable_http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+
+            let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
+                url: url.clone(),
+                headers: headers.clone(),
+                timeout_ms: *timeout_ms,
+            };
+
+            let transport = streamable_http_transport.get_or_create(transport_config);
+
+            transport
+                .send_request(resources_request)
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
@@ -780,6 +820,25 @@ async fn fetch_prompts_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
+        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
+            let streamable_http_transport = state
+                .streamable_http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+
+            let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
+                url: url.clone(),
+                headers: headers.clone(),
+                timeout_ms: *timeout_ms,
+            };
+
+            let transport = streamable_http_transport.get_or_create(transport_config);
+
+            transport
+                .send_request(prompts_request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
     };
 
     // Parse response and extract prompts array
@@ -835,6 +894,11 @@ async fn send_request_to_backend(
         },
         TransportType::Sse => {
             return Err(ProxyError::Transport("SSE not yet implemented".into()));
+        },
+        TransportType::StreamableHttp => {
+            return Err(ProxyError::Transport(
+                "StreamableHttp in route_generic_request not yet implemented".into(),
+            ));
         },
     };
 

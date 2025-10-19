@@ -7,6 +7,173 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2025-10-19 - 🔬 NWS HTTP Transport Research - Streamable HTTP Protocol Analysis
+
+### Research - National Weather Service MCP Server Integration
+
+#### Objective
+Validate Only1MCP's HTTP transport implementation with a real-world NWS (National Weather Service) MCP server to ensure production readiness.
+
+#### Key Findings
+
+**1. MCP Protocol Evolution (March 2025)**
+- **Legacy HTTP+SSE**: DEPRECATED as of 2025-03-26
+- **Streamable HTTP**: New standard replacing HTTP+SSE
+- **Key Difference**: Session management via `mcp-session-id` header
+- **Impact**: Only1MCP's SSE transport needs Streamable HTTP support
+
+**2. NWS MCP Server Deployment**
+- **Repository**: `invariantlabs-ai/mcp-streamable-http` (TypeScript example)
+- **Deployed**: `http://localhost:8124/mcp`
+- **Tools**: `get-alerts` (weather alerts by state), `get-forecast` (forecast by lat/long)
+- **API**: National Weather Service (api.weather.gov) - Public, no API key required
+- **Protocol**: Streamable HTTP (MCP Spec 2025-03-26)
+
+**3. Integration Status**
+- ✅ **Server Deployed**: Successfully running on localhost:8124
+- ✅ **Configuration Valid**: Added to `only1mcp.yaml` (4 servers total)
+- ⚠️ **Protocol Mismatch**: Only1MCP SSE transport lacks session management
+- ❌ **Tools Not Visible**: NWS tools don't appear in aggregated list
+- **Error**: `400 Bad Request: invalid session ID or method`
+
+**4. Transport Validation Matrix**
+| Transport | Server | Status | Notes |
+|-----------|--------|--------|-------|
+| **SSE** | Context7 | ✅ Working | Legacy HTTP+SSE format |
+| **STDIO** | Sequential Thinking | ❌ Failing | NPX issues (unrelated) |
+| **STDIO** | Memory | ❌ Failing | NPX issues (unrelated) |
+| **Streamable HTTP** | NWS Weather | ⚠️ Protocol Mismatch | Needs session support |
+
+#### Technical Analysis
+
+**Streamable HTTP vs Legacy HTTP+SSE:**
+
+```
+Legacy (Context7):                 Streamable (NWS):
+POST /mcp + GET /sse              POST /mcp (single endpoint)
+No session management             mcp-session-id header required
+SSE stream only                   JSON or SSE responses
+One-way notifications             Bidirectional communication
+```
+
+**Required Implementation:**
+```rust
+// Current SSE transport
+POST /mcp → Response (no session tracking)
+
+// Required Streamable HTTP transport
+POST /mcp (initialize) → 200 OK + mcp-session-id: <uuid>
+POST /mcp + mcp-session-id → Response (session-aware)
+```
+
+#### Recommendations
+
+**Immediate (This Sprint):**
+1. Create `src/transport/streamable_http.rs` with session management
+2. Rename `sse.rs` to `legacy_sse.rs` for backward compatibility
+3. Add session tracking (`mcp-session-id` header storage/reuse)
+4. Parse SSE `data:` prefix format
+
+**Short-Term (Next Sprint):**
+1. Auto-detect protocol version from server responses
+2. Fallback chain: Streamable HTTP → Legacy SSE → Plain HTTP
+3. Integration tests with local NWS server deployment
+4. Update documentation with protocol differences
+
+**Long-Term (Phase 3):**
+1. Deploy NWS server to cloud (Azure Container Apps)
+2. Public HTTPS endpoint for production testing
+3. Transport abstraction layer with automatic protocol negotiation
+
+### Added - Configuration
+
+**NWS Weather Server Entry:**
+```yaml
+servers:
+  - id: "nws-weather"
+    name: "National Weather Service MCP Server"
+    enabled: true
+    transport:
+      type: "sse"
+      url: "http://localhost:8124/mcp"
+      headers:
+        Accept: "application/json, text/event-stream"
+        Content-Type: "application/json"
+        User-Agent: "Only1MCP/0.2.4"
+    health_check:
+      enabled: false
+    weight: 100
+```
+
+**Status**: Configured but not functional due to protocol mismatch.
+
+### Documentation
+
+**Created:**
+- `docs/NWS_HTTP_TRANSPORT_RESEARCH.md` (5,000+ lines) - Comprehensive research report
+  - MCP protocol evolution analysis
+  - Streamable HTTP vs Legacy HTTP+SSE comparison
+  - Server deployment instructions
+  - Direct testing results
+  - Integration attempt analysis
+  - Technical implementation requirements
+  - Error message reference
+  - Test commands and examples
+
+**Sections Include:**
+- Executive Summary
+- Research Process (4 tasks)
+- Technical Analysis
+- Performance & Security Validation
+- Conclusions & Learnings
+- Recommendations (Immediate/Short-Term/Long-Term)
+- Appendices (Test Commands, Source Code Review, Protocol Comparison)
+
+### Learnings
+
+1. **MCP is Rapidly Evolving**: Streamable HTTP is the future (March 2025 spec)
+2. **Session Management is Critical**: Modern servers require `mcp-session-id` tracking
+3. **Transport Abstraction Needed**: One "SSE" transport isn't enough for both protocols
+4. **No Public MCP Test Servers**: All testing requires local server deployment
+
+### Testing
+
+**Direct Server Testing:**
+- ✅ NWS server responds to curl with `mcp-session-id` header
+- ✅ Initialization handshake working (with proper headers)
+- ✅ Tools exposed: `get-alerts`, `get-forecast`
+
+**Only1MCP Proxy Testing:**
+- ✅ Config validation passing
+- ✅ 4 servers registered (health check confirms)
+- ❌ NWS tools not appearing in aggregated list
+- ❌ 400 Bad Request error (missing session management)
+
+### Files Modified
+
+**Configuration:**
+- `only1mcp.yaml` - Added NWS weather server entry
+
+**Documentation:**
+- `docs/NWS_HTTP_TRANSPORT_RESEARCH.md` - Created (5,000+ lines)
+- `CHANGELOG.md` - This entry
+
+### Next Steps
+
+**To Enable NWS Integration:**
+1. Implement Streamable HTTP transport with session management (~4-6 hours)
+2. Add session storage and header tracking
+3. Parse SSE `data:` prefix format
+4. Write integration tests with local server
+5. Enable NWS server in configuration
+
+**Alternative (Quick Fix):**
+- Use Context7 as SSE validation (already working)
+- Focus HTTP transport validation on plain HTTP endpoints
+- Document Streamable HTTP as future work
+
+---
+
 ## [0.2.3] - 2025-10-19 - 🎉 STDIO MCP Protocol Implementation - Sequential Thinking & Memory Servers Fully Functional!
 
 ### Added - MCP Protocol Initialization Handshake

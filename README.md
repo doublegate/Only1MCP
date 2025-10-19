@@ -67,7 +67,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 - ✅ **Context7** - Up-to-date library documentation (SSE transport)
   - Tools: `resolve-library-id`, `get-library-docs`
-  - Endpoint: https://mcp.context7.com/mcp
+  - Endpoint: <https://mcp.context7.com/mcp>
   - Status: ✅ Fully Functional
 - ✅ **Sequential Thinking** - Multi-step reasoning engine (STDIO transport)
   - Tools: `sequentialthinking`
@@ -79,6 +79,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Status: ✅ Fully Functional (MCP protocol 2024-11-05)
 
 **Transport Support**
+
 - ✅ **SSE Servers** - Full support with automatic SSE parsing (e.g., Context7)
 - ✅ **HTTP MCP Servers** - Any MCP server with HTTP/JSON-RPC 2.0
 - ✅ **STDIO MCP Servers** - Full MCP protocol initialization handshake (protocol version 2024-11-05)
@@ -92,6 +93,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 ### Phase 2 Features (✅ 100% Complete - 6/6 Features)
 
 **Configuration Management**
+
 - ✅ **Hot-Reload** - Automatic config updates without restart (notify 6.1)
   - 500ms debounced file watching
   - Atomic updates with ArcSwap
@@ -99,6 +101,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - YAML and TOML support
 
 **Health Monitoring**
+
 - ✅ **Active Health Checking** - Timer-based health probes
   - HTTP health checks (GET /health)
   - STDIO process health checks
@@ -107,6 +110,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Prometheus metrics integration
 
 **Performance Optimization**
+
 - ✅ **Response Caching** - TTL-based LRU cache with moka 0.12
   - Three-tier architecture (L1: 5min, L2: 30min, L3: 2hr TTL)
   - Automatic TTL expiration and LRU eviction
@@ -226,6 +230,7 @@ vim only1mcp.yaml
 **Supported config formats:** YAML, TOML
 
 **What gets reloaded:**
+
 - Backend server list (add/remove/modify servers)
 - Health check settings
 - Load balancing configuration
@@ -233,11 +238,13 @@ vim only1mcp.yaml
 - Authentication rules
 
 **What requires restart:**
+
 - Server host/port binding
 - TLS certificates
 - Core runtime settings
 
 **Features:**
+
 - 📁 **File Watching** - notify 6.1 with debounced events (500ms)
 - ⚛️ **Atomic Updates** - Lock-free config swapping via ArcSwap
 - ✅ **Validation First** - Invalid configs rejected, old config preserved
@@ -287,6 +294,7 @@ servers:
 ```
 
 Modify the config, save, and within 500ms the proxy will:
+
 1. Detect the file change (debounced)
 2. Load and validate the new configuration
 3. Atomically swap if validation passes
@@ -294,12 +302,14 @@ Modify the config, save, and within 500ms the proxy will:
 5. Log success or error with details
 
 **Resilience:**
+
 - Invalid YAML/TOML → Old config preserved, error logged
 - Missing file → Error logged, old config active
 - Validation failure → Old config preserved, detailed error
 - Rapid changes → Debounced (only last change applied)
 
 **Monitoring:**
+
 ```bash
 # Check reload metrics
 curl http://localhost:8080/api/v1/admin/metrics | grep config_reload
@@ -323,10 +333,12 @@ servers:
 ```
 
 **Health Check Types**:
+
 - **HTTP**: GET request to /health endpoint (expects 200 OK)
 - **STDIO**: Process alive verification
 
 **Health States**:
+
 - **Healthy** (green): Server receives traffic
 - **Unhealthy** (red): Server removed from rotation
 - **Recovering** (yellow): Testing if server is healthy again
@@ -336,6 +348,7 @@ Unhealthy servers are automatically removed from the load balancer rotation
 and re-added once they pass the healthy threshold.
 
 **Metrics** (Prometheus):
+
 - `health_check_total` - Total checks (labels: server_id, result)
 - `health_check_duration_seconds` - Check duration histogram
 - `server_health_status` - Current health status (0=unhealthy, 1=healthy)
@@ -354,20 +367,24 @@ proxy:
 ```
 
 **Caching Strategy**:
+
 - **L1 (Tools)**: 5-minute TTL, 1000 entries
 - **L2 (Resources)**: 30-minute TTL, 500 entries
 - **L3 (Prompts)**: 2-hour TTL, 200 entries
 
 **Eviction Policies**:
+
 - **TTL (Time To Live)**: Entries expire after configured duration
 - **LRU (Least Recently Used)**: Oldest entries removed when capacity reached
 
 **Cached Operations**:
+
 - `tools/list` - Tool discovery
 - `resources/list` - Resource enumeration
 - `prompts/list` - Prompt templates
 
 **Metrics** (Prometheus):
+
 - `cache_hits_total` - Successful cache retrievals
 - `cache_misses_total` - Cache misses requiring backend call
 - `cache_size_entries` - Current number of cached entries
@@ -438,6 +455,7 @@ cargo run -- tui
 | `Space` | Pause updates | `Ctrl+C` | Force quit |
 
 **Features**:
+
 - **Overview Tab**: Metrics summary, sparkline graphs, real-time stats
 - **Servers Tab**: Health status table, RPS per server, status indicators
 - **Requests Tab**: Recent requests log, method distribution, latency percentiles
@@ -540,6 +558,7 @@ cargo run -- tui
   - Documentation: 500+ line benchmarking guide
 
 **Phase 2 Summary**:
+
 - ✅ 6/6 features complete
 - ✅ 113/113 tests passing (100% pass rate, includes 7 doc tests)
 - ✅ All performance targets validated
@@ -625,6 +644,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 ## 🗺️ Roadmap
 
 ### Phase 1: MVP Foundation ✅ Complete (October 14, 2025)
+
 - [x] Multi-transport support (HTTP, STDIO, SSE ✅, WebSocket stubs)
 - [x] Load balancing (5 algorithms: round-robin, least-connections, consistent-hash, random, weighted-random)
 - [x] Circuit breakers & passive health monitoring
@@ -634,6 +654,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 - [x] SSE transport implementation (61/61 tests total)
 
 ### Phase 2: Advanced Features ✅ Complete (October 18, 2025)
+
 - [x] Configuration hot-reload (notify 6.1, ArcSwap, 11 validation rules)
 - [x] Active health checking (HTTP/STDIO probes, threshold-based transitions)
 - [x] Response caching (moka 0.12, 3-tier TTL/LRU, TinyLFU eviction)
@@ -643,6 +664,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 - [x] 113/113 tests passing (100% pass rate, 86 new tests added including 7 doc tests)
 
 ### Phase 3: Enterprise Features 🎯 Next (Target: Weeks 9-12)
+
 - [ ] Advanced RBAC with dynamic policies (time-based, resource-based)
 - [ ] Audit logging system (structured logs, rotation, compliance)
 - [ ] Web dashboard (React/TypeScript, real-time metrics, server management)
@@ -652,6 +674,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed design documentation.
 - [ ] Configuration API (REST endpoints for runtime updates)
 
 ### Phase 4: Extensions 🔮 Future (Target: Weeks 13+)
+
 - [ ] Plugin system (WebAssembly for custom middleware)
 - [ ] AI-driven optimization (adaptive load balancing, predictive caching)
 - [ ] GUI application (Tauri desktop app for management)
@@ -790,20 +813,24 @@ at your option.
 Built with these excellent Rust crates:
 
 **Core Infrastructure**:
+
 - [Axum](https://github.com/tokio-rs/axum) - Web framework
 - [Tokio](https://tokio.rs/) - Async runtime
 - [bb8](https://github.com/djc/bb8) - Connection pooling
 - [DashMap](https://github.com/xacrimon/dashmap) - Concurrent hashmap
 
 **Observability**:
+
 - [Prometheus](https://github.com/tikv/rust-prometheus) - Metrics collection
 - [tracing](https://github.com/tokio-rs/tracing) - Structured logging
 
 **Security**:
+
 - [jsonwebtoken](https://github.com/Keats/jsonwebtoken) - JWT validation
 - [oauth2](https://github.com/ramosbugs/oauth2-rs) - OAuth2/OIDC flows
 
 **Phase 2 Features**:
+
 - [moka](https://github.com/moka-rs/moka) - High-performance caching (TTL/LRU)
 - [notify](https://github.com/notify-rs/notify) - File system watching (hot-reload)
 - [which](https://github.com/harryfei/which-rs) - Command validation (STDIO health checks)

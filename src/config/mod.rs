@@ -86,6 +86,14 @@ pub enum TransportConfig {
         #[serde(default)]
         headers: std::collections::HashMap<String, String>,
     },
+    #[serde(rename = "streamable_http")]
+    StreamableHttp {
+        url: String,
+        #[serde(default)]
+        headers: std::collections::HashMap<String, String>,
+        #[serde(default = "default_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -302,6 +310,9 @@ fn default_tui_default_tab() -> String {
 }
 fn default_tui_refresh_ms() -> u64 {
     1000
+}
+fn default_timeout_ms() -> u64 {
+    30000
 }
 
 impl Default for ServerConfig {

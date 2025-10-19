@@ -79,6 +79,7 @@ pub enum TransportType {
     Stdio,
     Http,
     Sse,
+    StreamableHttp,
     WebSocket,
 }
 
@@ -371,6 +372,9 @@ impl RegistryInner {
                 (TransportType::Http, url.clone(), None, None, None)
             },
             TransportConfig::Sse { url, .. } => (TransportType::Sse, url.clone(), None, None, None),
+            TransportConfig::StreamableHttp { url, .. } => {
+                (TransportType::StreamableHttp, url.clone(), None, None, None)
+            },
         };
 
         let health_check = if mcp.health_check.enabled {
