@@ -1,0 +1,82 @@
+# Only1MCP Kubernetes ConfigMap
+# Configuration for production deployment
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: only1mcp-config
+  labels:
+    app: only1mcp
+data:
+  only1mcp.yaml: |
+    # Only1MCP Production Configuration
+    server:
+      host: "0.0.0.0"
+      port: 8080
+      worker_threads: 0  # Auto-detect based on CPU cores
+      max_connections: 50000
+
+    # Backend MCP servers
+    servers:
+      - id: "context7"
+        name: "Context7 Documentation"
+        enabled: true
+        transport:
+          type: "sse"
+          url: "https://mcp.context7.com/mcp"
+          headers:
+            Accept: "application/json, text/event-stream"
+            Content-Type: "application/json"
+        health_check:
+          enabled: false  # SSE doesn't support standard health checks
+        weight: 100
+
+      # Add more servers as needed
+      # - id: "backend-2"
+      #   name: "Internal MCP Server"
+      #   enabled: true
+      #   transport:
+      #     type: "http"
+      #     url: "http://internal-mcp:3000"
+      #   health_check:
+      #     enabled: true
+      #     interval_seconds: 10
+      #     timeout_seconds: 5
+      #     path: "/health"
+      #   weight: 50
+
+    # Proxy configuration
+    proxy:
+      load_balancer:
+        algorithm: "round_robin"  # round_robin, least_connections, consistent_hash, random, weighted_random
+        virtual_nodes: 150
+      connection_pool:
+        max_per_backend: 100
+        min_idle: 10
+      routing:
+        algorithm: "round_robin"
+        sticky_sessions: false
+
+    # Context optimization
+    context_optimization:
+      cache:
+        enabled: true
+        max_entries: 10000
+        ttl_seconds: 300
+      batching:
+        enabled: true
+        window_ms: 100
+        max_batch_size: 10
+        methods:
+          - "tools/list"
+          - "resources/list"
+          - "prompts/list"
+
+    # Authentication (disabled by default)
+    auth: {}
+
+    # Observability
+    observability:
+      logging:
+        level: "info"
+        format: "json"

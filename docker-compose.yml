@@ -1,0 +1,125 @@
+# Only1MCP Docker Compose
+# Complete stack for local development and testing
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Only1MCP Proxy Server
+  # ==========================================================================
+  only1mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: only1mcp-proxy
+    ports:
+      - "8080:8080"  # Proxy HTTP endpoint
+    volumes:
+      # Mount custom configuration
+      - ./config/templates/solo.yaml:/etc/only1mcp/only1mcp.yaml:ro
+      # Persist logs
+      - only1mcp-logs:/var/log/only1mcp
+      # Persist data
+      - only1mcp-data:/var/lib/only1mcp
+    environment:
+      - RUST_LOG=info
+      - ONLY1MCP_LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - only1mcp-network
+
+  # ==========================================================================
+  # Mock MCP Backend 1 (for testing)
+  # ==========================================================================
+  mock-backend-1:
+    image: nginx:alpine
+    container_name: mock-backend-1
+    ports:
+      - "9001:80"
+    volumes:
+      - ./deployments/mock-backends/backend1.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - only1mcp-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Mock MCP Backend 2 (for load balancing tests)
+  # ==========================================================================
+  mock-backend-2:
+    image: nginx:alpine
+    container_name: mock-backend-2
+    ports:
+      - "9002:80"
+    volumes:
+      - ./deployments/mock-backends/backend2.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - only1mcp-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Prometheus (metrics collection)
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: only1mcp-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployments/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - only1mcp-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Grafana (metrics visualization)
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: only1mcp-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deployments/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deployments/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - only1mcp-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  only1mcp-logs:
+    driver: local
+  only1mcp-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  only1mcp-network:
+    driver: bridge

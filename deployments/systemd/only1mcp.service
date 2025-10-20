@@ -1,0 +1,62 @@
+# Only1MCP systemd Service Unit
+# System-wide service for Only1MCP proxy server
+#
+# Installation:
+#   1. Copy to /etc/systemd/system/only1mcp.service
+#   2. sudo systemctl daemon-reload
+#   3. sudo systemctl enable only1mcp
+#   4. sudo systemctl start only1mcp
+#
+# Management:
+#   Status:  sudo systemctl status only1mcp
+#   Logs:    sudo journalctl -u only1mcp -f
+#   Restart: sudo systemctl restart only1mcp
+#   Stop:    sudo systemctl stop only1mcp
+
+[Unit]
+Description=Only1MCP - High-Performance MCP Server Aggregator & Proxy
+Documentation=https://github.com/doublegate/Only1MCP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=only1mcp
+Group=only1mcp
+
+# Working directory
+WorkingDirectory=/opt/only1mcp
+
+# Binary location (adjust if installed elsewhere)
+ExecStart=/usr/local/bin/only1mcp start --foreground --config /etc/only1mcp/only1mcp.yaml
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/only1mcp /var/log/only1mcp
+
+# Allow binding to privileged ports if needed
+#AmbientCapabilities=CAP_NET_BIND_SERVICE
+#CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Environment
+Environment="RUST_LOG=info"
+Environment="ONLY1MCP_CONFIG=/etc/only1mcp/only1mcp.yaml"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=only1mcp
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,128 @@
+# Only1MCP Kubernetes Deployment
+# Production-ready deployment with resource limits and health checks
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: only1mcp
+  labels:
+    app: only1mcp
+    version: v0.2.0
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: only1mcp
+  template:
+    metadata:
+      labels:
+        app: only1mcp
+        version: v0.2.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/api/v1/admin/metrics"
+    spec:
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # Init container to validate configuration
+      initContainers:
+      - name: config-validator
+        image: only1mcp:latest
+        command: ["/usr/local/bin/only1mcp", "validate", "/etc/only1mcp/only1mcp.yaml"]
+        volumeMounts:
+        - name: config
+          mountPath: /etc/only1mcp
+          readOnly: true
+
+      containers:
+      - name: only1mcp
+        image: only1mcp:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: ONLY1MCP_CONFIG
+          value: "/etc/only1mcp/only1mcp.yaml"
+        - name: ONLY1MCP_LOG_LEVEL
+          value: "info"
+
+        # Resource limits (adjust based on load)
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+
+        # Liveness probe (restart if unresponsive)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness probe (remove from service if not ready)
+        readinessProbe:
+          httpGet:
+            path: /api/v1/admin/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Startup probe (allow time for initialization)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+
+        # Volume mounts
+        volumeMounts:
+        - name: config
+          mountPath: /etc/only1mcp
+          readOnly: true
+        - name: logs
+          mountPath: /var/log/only1mcp
+
+      # Volumes
+      volumes:
+      - name: config
+        configMap:
+          name: only1mcp-config
+      - name: logs
+        emptyDir: {}
+
+      # Pod distribution across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - only1mcp
+              topologyKey: kubernetes.io/hostname

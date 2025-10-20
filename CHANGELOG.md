@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`/sub-agent` Custom Command** - Systematic sub-agent launcher with quality standards
+  - Comprehensive project context for Only1MCP (version, status, architecture)
+  - Six-phase systematic approach (Analyze, Plan, Execute, Verify, Document, Report)
+  - Quality standards enforcement (code, documentation, commits, memory banks)
+  - Verification checklist and deliverables template
+  - Error handling guidelines and efficiency best practices
+  - Memory bank update requirements
+  - Adapted from ProRT-IP command structure (mostly generic, project-specific sections customized)
+  - Location: `.claude/commands/sub-agent.md` (~110 lines)
+
 ## [0.2.10] - 2025-10-20
 
 ### Added

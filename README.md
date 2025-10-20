@@ -945,6 +945,7 @@ Only1MCP includes custom slash commands for streamlined development workflows:
 - `/fix-failing-tests` - Systematic test debugging
 - `/daily-log` - Create or update daily development session logs
 - `/session-summary` - Update CLAUDE.local.md with session results
+- `/sub-agent` - Launch sub-agent with systematic approach and quality standards
 
 **Documentation & Commits**:
 - `/update-docs` - Synchronize README and CHANGELOG

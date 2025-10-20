@@ -1,0 +1,57 @@
+# Only1MCP Kubernetes Service
+# LoadBalancer service for external access
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: only1mcp
+  labels:
+    app: only1mcp
+spec:
+  type: LoadBalancer
+  selector:
+    app: only1mcp
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours
+---
+# ClusterIP service for internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: only1mcp-internal
+  labels:
+    app: only1mcp
+spec:
+  type: ClusterIP
+  selector:
+    app: only1mcp
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+---
+# Headless service for direct pod access
+apiVersion: v1
+kind: Service
+metadata:
+  name: only1mcp-headless
+  labels:
+    app: only1mcp
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: only1mcp
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
