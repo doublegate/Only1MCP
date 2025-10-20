@@ -50,6 +50,10 @@ solo.yaml
 # Session memory (local only)
 CLAUDE.local.md
 
+# Development logs (personal notes)
+dev-logs/*
+!dev-logs/README.md
+
 # OS
 Thumbs.db
 .DS_Store

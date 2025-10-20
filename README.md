@@ -936,6 +936,27 @@ Only1MCP/
     └── Phase_1/             # Phase 1 completion docs
 ```
 
+### Custom Commands (Claude Code)
+
+Only1MCP includes custom slash commands for streamlined development workflows:
+
+**Development Workflow**:
+- `/rust-check` - Comprehensive quality pipeline (format, lint, test, build)
+- `/fix-failing-tests` - Systematic test debugging
+- `/daily-log` - Create or update daily development session logs
+- `/session-summary` - Update CLAUDE.local.md with session results
+
+**Documentation & Commits**:
+- `/update-docs` - Synchronize README and CHANGELOG
+- `/phase-report` - Generate comprehensive phase progress report
+- `/phase-commit` - Create detailed conventional commit messages
+
+**Feature Development**:
+- `/next-phase-feature` - Initialize next phase feature development
+- `/memory-update` - Preserve architectural decisions in MCP Memory
+
+Use slash commands in Claude Code by typing `/command-name`.
+
 ---
 
 ## ⚡ Performance

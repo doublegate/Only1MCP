@@ -7,6 +7,185 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2025-10-20
+
+### Added
+- **Claude Code Custom Commands** (3 new commands in `.claude/commands/`)
+  - `/daily-log` - Daily development session logging (writes to `dev-logs/YYYY-MM-DD.md`)
+  - `/session-summary` - Update CLAUDE.local.md with session results
+  - `/memory-update` - Update MCP Memory knowledge graph with architectural decisions
+- **Development Logs Infrastructure**
+  - `dev-logs/` directory for daily session notes
+  - `dev-logs/README.md` with documentation and usage guide
+  - Gitignore entry (logs are private, README is tracked)
+- **Custom Commands Documentation** in README.md
+  - New "Custom Commands (Claude Code)" subsection under Development
+  - Lists all 9 available slash commands (6 existing + 3 new)
+  - Organized by category: Development Workflow, Documentation & Commits, Feature Development
+
+### Changed
+- `.gitignore` updated to exclude `dev-logs/*` but track `dev-logs/README.md`
+- README.md Development section expanded with Custom Commands subsection
+
+### Technical Details
+
+#### Custom Command Structure
+
+**Location**: `.claude/commands/*.md`
+**Invocation**: Type `/command-name` in Claude Code interface
+**Format**: Markdown files with comprehensive instructions for Claude
+
+**New Commands**:
+
+1. **/daily-log** (~150 lines)
+   - Creates or appends to `dev-logs/YYYY-MM-DD.md`
+   - Template includes: Summary, Tasks, Decisions, Code Changes, Testing, Blockers, Next Steps, Metrics
+   - Auto-populates version from `Cargo.toml`, phase from `to-dos/master-tracker.md`
+   - Supports multiple sessions per day (append mode with session numbering)
+   - Session format: Date header, project metadata, numbered sessions with timestamps
+
+2. **/session-summary** (~160 lines)
+   - Updates CLAUDE.local.md "Current Session Summary" section
+   - Updates build status (cargo check/build/test/clippy/fmt)
+   - Updates "Last Updated" timestamp with full format
+   - Preserves all existing content (uses Edit tool, not Write)
+   - Auto-increments session numbers
+   - Session entry includes: Title, emoji, tasks (categorized), implementation highlights, technical details, files modified
+
+3. **/memory-update** (~230 lines)
+   - Creates entities in MCP Memory knowledge graph
+   - Supports 5 entity types: Architecture, TechnicalDebt, KnowledgeBase, Implementation, Testing
+   - Entity naming format: `Only1MCP_[Topic]_[Type]`
+   - 3-8 observations per entity (detailed technical statements)
+   - Optional relations between entities (implements, depends_on, enhances, uses, etc.)
+   - Verification via `search_nodes` after creation
+
+#### Daily Log Format
+
+**Location**: `dev-logs/YYYY-MM-DD.md` (ISO 8601 date format)
+
+**Template Structure**:
+```markdown
+# Development Log - YYYY-MM-DD
+
+**Project**: Only1MCP
+**Phase**: Phase [N]
+**Version**: vX.X.X
+
+## Session N - [START_TIME] - [END_TIME]
+
+### Summary
+[Brief overview of work done]
+
+### Tasks Completed
+- [Task 1]
+- [Task 2]
+
+### Architectural Decisions
+- **Decision**: [What was decided]
+  - **Rationale**: [Why]
+  - **Impact**: [Effect on system]
+
+### Code Changes
+**Files Modified**: X files
+- `path/file` - Description
+
+### Testing
+- **Tests Run**: [Results]
+- **Status**: [Pass/Fail]
+
+### Blockers/Issues
+- [Issue] - [Status]
+
+### Next Session
+- [ ] [Planned task]
+
+### Metrics
+- **Tests**: XXX/XXX passing
+- **Build**: ✅ SUCCESS
+- **Version**: vX.X.X
+- **Commit**: [hash]
+```
+
+#### Memory Entity Patterns
+
+**Naming Convention**: `Only1MCP_[Topic]_[Type]`
+
+**Examples**:
+- `Only1MCP_CustomCommands_Architecture` (Architecture type)
+- `Only1MCP_DevWorkflow_BestPractices` (KnowledgeBase type)
+- `Only1MCP_DailyLog_Implementation` (Implementation type)
+
+**Observation Guidelines**:
+- Specific: Include technologies, versions, patterns
+- Technical: Implementation details
+- Contextual: Explain why, not just what
+- Actionable: Useful for future development
+
+### Files Added (4 files)
+
+1. `.claude/commands/daily-log.md` (~150 lines) - Daily logging command
+2. `.claude/commands/session-summary.md` (~160 lines) - Session summary updates
+3. `.claude/commands/memory-update.md` (~230 lines) - Memory graph updates
+4. `dev-logs/README.md` (~40 lines) - Development logs documentation
+
+### Files Modified (2 files)
+
+1. `.gitignore` (+4 lines) - Added dev-logs exclusion pattern
+2. `README.md` (+19 lines) - Added Custom Commands subsection
+
+### Development Experience Impact
+
+**Before**:
+- Manual session logging in CLAUDE.local.md
+- Inconsistent daily log format
+- No structured knowledge preservation
+- Manual memory bank updates
+
+**After**:
+- Streamlined workflows via custom commands
+- Structured daily logging: `/daily-log`
+- Automated session summaries: `/session-summary`
+- Knowledge preservation: `/memory-update`
+
+**Example Workflow**:
+```bash
+# Start of session
+/daily-log                 # Create today's log entry
+
+# During development
+[... coding ...]
+
+# Capture decision
+/memory-update            # Record in knowledge graph
+
+# End of session
+/session-summary          # Update CLAUDE.local.md
+/daily-log                # Update with final results
+/phase-commit             # Commit changes
+```
+
+### Gitignore Pattern
+
+```gitignore
+# Development logs (personal notes)
+dev-logs/*
+!dev-logs/README.md
+```
+
+**Rationale**: Daily logs are personal development notes and should remain private. Only the README is tracked to document the structure for future contributors.
+
+### Integration with Existing Commands
+
+**Total Commands**: 9 slash commands
+- **Existing** (6): `/rust-check`, `/update-docs`, `/phase-commit`, `/phase-report`, `/fix-failing-tests`, `/next-phase-feature`
+- **New** (3): `/daily-log`, `/session-summary`, `/memory-update`
+
+**Command Categories**:
+1. **Development Workflow**: rust-check, fix-failing-tests, daily-log, session-summary
+2. **Documentation & Commits**: update-docs, phase-report, phase-commit
+3. **Feature Development**: next-phase-feature, memory-update
+
 ## [0.2.9] - 2025-10-19
 
 ### Added
