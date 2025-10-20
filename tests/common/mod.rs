@@ -119,7 +119,9 @@ pub async fn start_test_server(mut config: Config) -> TestServer {
         .parse()
         .expect("Invalid address");
 
-    let server = ProxyServer::new(config).await.expect("Failed to create server");
+    let server = ProxyServer::new(config, std::path::PathBuf::from("test-config.yaml"))
+        .await
+        .expect("Failed to create server");
 
     // Spawn server in background
     let handle = tokio::spawn(async move {

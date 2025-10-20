@@ -524,16 +524,16 @@ pub async fn handle_websocket_upgrade(
 }
 
 async fn handle_websocket(_socket: axum::extract::ws::WebSocket, _state: AppState) {
-    // TODO: Implement WebSocket handling for bidirectional streaming
-    info!("WebSocket connection established");
+    // Phase 3 feature: WebSocket bidirectional streaming support
+    info!("WebSocket connection established (handler not yet implemented)");
 }
 
 /// Handle Server-Sent Events stream.
 pub async fn handle_sse_stream(
     State(_state): State<AppState>,
 ) -> std::result::Result<Response, ProxyError> {
-    // TODO: Implement SSE for server push
-    Ok(Response::new("SSE endpoint".into()))
+    // Phase 3 feature: Server-Sent Events for server push notifications
+    Ok(Response::new("SSE endpoint (not yet implemented)".into()))
 }
 
 /// Route generic/unknown requests to appropriate backend.

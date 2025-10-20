@@ -356,8 +356,7 @@ impl StdioTransport {
         }
 
         // Get process
-        let process =
-            self.processes.get(&server_id).ok_or_else(|| TransportError::ProcessUnhealthy)?;
+        let process = self.processes.get(&server_id).ok_or(TransportError::ProcessUnhealthy)?;
 
         // Send request as JSON-RPC
         let request_json = serde_json::to_value(&request)?;
@@ -414,7 +413,7 @@ impl StdioTransport {
 
         // Extract package name from args
         // Expected: ["-y", "@modelcontextprotocol/server-NAME"] or similar
-        let package_name = config.args.iter().skip_while(|arg| arg.starts_with('-')).next()?;
+        let package_name = config.args.iter().find(|arg| !arg.starts_with('-'))?;
 
         debug!("Attempting to resolve NPX package: {}", package_name);
 
@@ -457,7 +456,7 @@ impl StdioTransport {
 
         // Extract package name without scope
         // @modelcontextprotocol/server-NAME -> server-NAME
-        let package_name_only = package_name.split('/').last().unwrap_or(package_name);
+        let package_name_only = package_name.split('/').next_back().unwrap_or(package_name);
 
         debug!(
             "Searching for package: {} in {}",
@@ -491,7 +490,7 @@ impl StdioTransport {
         use std::process::Command;
 
         // Try to get from npm config
-        let output = Command::new("npm").args(&["config", "get", "cache"]).output().ok()?;
+        let output = Command::new("npm").args(["config", "get", "cache"]).output().ok()?;
 
         if output.status.success() {
             let cache_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -515,6 +514,19 @@ impl StdioTransport {
         None
     }
 
+    /// Helper to check if a path matches a glob pattern (reduces nesting).
+    fn matches_glob_pattern(path_str: &str, pattern_parts: &[&str]) -> bool {
+        let mut pos = 0;
+        for part in pattern_parts {
+            if let Some(idx) = path_str[pos..].find(part) {
+                pos += idx + part.len();
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Simple glob-like search for files matching a pattern.
     fn glob_find(base: &std::path::Path, pattern: &str) -> Option<std::path::PathBuf> {
         use walkdir::WalkDir;
@@ -522,32 +534,20 @@ impl StdioTransport {
         // Convert glob pattern to matching logic
         let pattern_parts: Vec<&str> = pattern.split("**").collect();
 
-        for entry in WalkDir::new(base).max_depth(10).follow_links(false) {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                let path_str = path.to_string_lossy();
+        for entry in WalkDir::new(base).max_depth(10).follow_links(false).into_iter().flatten() {
+            let path = entry.path();
+            let path_str = path.to_string_lossy();
 
-                // Simple pattern matching
-                let matches = if pattern.contains("**") {
-                    // Check if path contains all pattern parts in order
-                    let mut pos = 0;
-                    let mut matched = true;
-                    for part in &pattern_parts {
-                        if let Some(idx) = path_str[pos..].find(part) {
-                            pos += idx + part.len();
-                        } else {
-                            matched = false;
-                            break;
-                        }
-                    }
-                    matched
-                } else {
-                    path_str.ends_with(pattern)
-                };
+            // Simple pattern matching
+            let matches = if pattern.contains("**") {
+                // Check if path contains all pattern parts in order
+                Self::matches_glob_pattern(&path_str, &pattern_parts)
+            } else {
+                path_str.ends_with(pattern)
+            };
 
-                if matches && path.is_file() {
-                    return Some(path.to_path_buf());
-                }
+            if matches && path.is_file() {
+                return Some(path.to_path_buf());
             }
         }
 
@@ -577,7 +577,7 @@ impl StdioTransport {
             info!(
                 "Resolved NPX package to direct node execution: {} → {}",
                 config.command,
-                resolved_config.args.get(0).unwrap_or(&"?".to_string())
+                resolved_config.args.first().unwrap_or(&"?".to_string())
             );
         }
 
@@ -738,31 +738,7 @@ impl StdioProcess {
         // STDIO MCP servers often print startup messages and logs to stderr, and if
         // we don't read them, the 64KB pipe buffer fills up, causing the process to
         // block on stderr writes and become unresponsive.
-        tokio::spawn(async move {
-            let mut stderr_lock = stderr_clone.lock().await;
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match stderr_lock.read_line(&mut line).await {
-                    Ok(0) => {
-                        // EOF - process has exited
-                        debug!("stderr [{}]: EOF reached", server_id_clone);
-                        break;
-                    },
-                    Ok(_) => {
-                        // Log stderr output for debugging
-                        let trimmed = line.trim();
-                        if !trimmed.is_empty() {
-                            debug!("stderr [{}]: {}", server_id_clone, trimmed);
-                        }
-                    },
-                    Err(e) => {
-                        debug!("stderr [{}]: Read error: {}", server_id_clone, e);
-                        break;
-                    },
-                }
-            }
-        });
+        tokio::spawn(Self::drain_stderr(stderr_clone, server_id_clone));
 
         Self {
             child: Arc::new(Mutex::new(child)),
@@ -935,6 +911,33 @@ impl StdioProcess {
         }
 
         false
+    }
+
+    /// Background task to drain stderr (prevents blocking). Reduces nesting.
+    async fn drain_stderr(stderr: Arc<Mutex<BufReader<ChildStderr>>>, server_id: String) {
+        let mut stderr_lock = stderr.lock().await;
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match stderr_lock.read_line(&mut line).await {
+                Ok(0) => {
+                    // EOF - process has exited
+                    debug!("stderr [{}]: EOF reached", server_id);
+                    break;
+                },
+                Ok(_) => {
+                    // Log stderr output for debugging (skip empty lines)
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        debug!("stderr [{}]: {}", server_id, trimmed);
+                    }
+                },
+                Err(e) => {
+                    debug!("stderr [{}]: Read error: {}", server_id, e);
+                    break;
+                },
+            }
+        }
     }
 }
 

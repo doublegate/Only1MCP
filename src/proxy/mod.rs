@@ -13,6 +13,6 @@ pub mod server;
 pub use server::ProxyServer;
 
 /// Initialize the proxy server with configuration
-pub async fn init(config: Config) -> Result<ProxyServer> {
-    ProxyServer::new(config).await
+pub async fn init(config: Config, config_path: std::path::PathBuf) -> Result<ProxyServer> {
+    ProxyServer::new(config, config_path).await
 }

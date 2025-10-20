@@ -3,13 +3,13 @@
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-121%2F121%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-127%2F127%20passing-brightgreen.svg)]()
 [![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
 [![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 
-> **Status**: 🎉 **All 4 MCP Servers Operational!** STDIO, SSE, and Streamable HTTP transports working - 14 tools available across Context7, Sequential Thinking, Memory, and NWS Weather servers. Phase 2 Complete with all 6 features - 100% test pass rate (121/121)
+> **Status**: 🎉 **All 4 MCP Servers Operational!** STDIO, SSE, and Streamable HTTP transports working - 14 tools available across Context7, Sequential Thinking, Memory, and NWS Weather servers. Phase 2 Complete with all 6 features - 100% test pass rate (127/127)
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
@@ -45,11 +45,11 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 **Testing & Quality**
 
-- ✅ **121/121 Tests Passing** - 100% test success rate achieved
-- 🧪 **51 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, Streamable HTTP transport, TUI interface, STDIO MCP init
+- ✅ **127/127 Tests Passing** - 100% test success rate achieved
+- 🧪 **59 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, Streamable HTTP transport, TUI interface, STDIO MCP init, daemon lifecycle
 - 🔬 **62 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE, Streamable HTTP, TUI
-- 📚 **8 Doc Tests** - Inline code examples verified
-- 🆕 **Streamable HTTP Tests** - NWS Weather server integration with session management
+- 📚 **6 Doc Tests** - Inline code examples verified
+- 🆕 **Daemon Lifecycle Tests** - Complete daemon management testing (start, stop, foreground, duplicate prevention, stale PIDs, signals)
 - 📝 **8,500+ Lines Documentation** - Comprehensive guides, API references, and implementation details
 
 **Supported Transports**
@@ -226,6 +226,178 @@ curl -X POST http://localhost:8080/mcp \
     "method": "tools/list",
     "id": 1
   }'
+```
+
+## Usage
+
+Only1MCP supports multiple modes of operation: daemon mode (background), foreground mode, and interactive TUI.
+
+### Quick Start
+
+```bash
+# Start daemon in background (default)
+only1mcp start
+
+# View available commands
+only1mcp --help
+
+# Stop daemon
+only1mcp stop
+```
+
+### Daemon Mode (Recommended)
+
+**Start the daemon** (runs in background):
+```bash
+only1mcp start
+```
+
+Output:
+```
+✅ Only1MCP server started successfully!
+🌐 Proxy URL: http://127.0.0.1:8080
+📋 PID File: /home/user/.config/only1mcp/only1mcp.pid
+📝 Log File: /home/user/.config/only1mcp/only1mcp.log
+
+🔧 Loaded MCP Servers:
+  • Context7 (sse): 2 tools
+    - resolve-library-id, get-library-docs
+  • Sequential Thinking (stdio): 1 tool
+    - sequentialthinking
+  • Memory (stdio): 9 tools
+    - create_entities, add_observations, delete_entities, ...
+  • NWS Weather (streamable_http): 2 tools
+    - get-forecast, get-alerts
+
+Total: 14 tools across 4 servers
+```
+
+**Stop the daemon**:
+```bash
+only1mcp stop
+```
+
+**Check daemon status**:
+```bash
+# Via Admin API
+curl http://127.0.0.1:8080/api/v1/admin/health
+
+# Response:
+{
+  "status": "healthy",
+  "servers_total": 4,
+  "servers_healthy": 4,
+  "tools_total": 14,
+  "uptime_seconds": 3600
+}
+```
+
+### Foreground Mode
+
+Run in the current terminal (useful for debugging):
+```bash
+only1mcp start --foreground
+```
+
+Press `Ctrl+C` to stop.
+
+### Interactive TUI
+
+Launch the Terminal User Interface:
+```bash
+only1mcp tui
+```
+
+**Auto-Start Behavior**: If daemon is not running, TUI will automatically start it.
+
+**Exit Behavior**: When you press `q` to quit TUI, you'll be prompted:
+```
+🛑 Stop Only1MCP daemon? [y/N]:
+```
+- Type `y` to stop daemon
+- Type `n` (or press Enter) to leave daemon running
+
+**Navigation**:
+- `Tab` / `Shift+Tab`: Switch between tabs
+- `↑` / `↓`: Scroll lists
+- `q`: Quit TUI
+
+### Configuration
+
+**Default Location**: `~/.config/only1mcp/only1mcp.yaml`
+
+**Auto-Creation**: If no config exists, Only1MCP automatically creates one from the solo template.
+
+**Custom Config**:
+```bash
+only1mcp start --config /path/to/custom.yaml
+```
+
+**Generate Config from Template**:
+```bash
+only1mcp config generate --template solo > only1mcp.yaml
+only1mcp config generate --template team > team-config.yaml
+only1mcp config generate --template enterprise > enterprise-config.yaml
+```
+
+**Validate Config**:
+```bash
+only1mcp validate
+only1mcp validate --config custom.yaml
+```
+
+### Admin API
+
+Query daemon status programmatically:
+
+```bash
+# List all servers
+curl http://127.0.0.1:8080/api/v1/admin/servers
+
+# List all tools
+curl http://127.0.0.1:8080/api/v1/admin/tools
+
+# Health check
+curl http://127.0.0.1:8080/api/v1/admin/health
+
+# System info
+curl http://127.0.0.1:8080/api/v1/admin/system
+```
+
+See [API_REFERENCE.md](docs/API_REFERENCE.md) for complete API documentation.
+
+### Advanced Usage
+
+**Custom Host/Port**:
+```bash
+only1mcp start --host 0.0.0.0 --port 9000
+```
+
+**Enable Debug Logging**:
+```bash
+RUST_LOG=debug only1mcp start --foreground
+```
+
+**List Available Servers** (without starting):
+```bash
+only1mcp list --config only1mcp.yaml
+```
+
+### Troubleshooting
+
+**Daemon won't start**:
+1. Check if already running: `curl http://127.0.0.1:8080/health`
+2. Check logs: `tail -f ~/.config/only1mcp/only1mcp.log`
+3. Try foreground mode: `only1mcp start --foreground`
+
+**Port already in use**:
+```bash
+only1mcp start --port 8081
+```
+
+**Config validation errors**:
+```bash
+only1mcp validate  # Shows detailed error messages
 ```
 
 ### Configuration Hot-Reload

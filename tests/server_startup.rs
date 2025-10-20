@@ -43,13 +43,13 @@ async fn test_health_endpoint_returns_status() {
         .await
         .expect("Failed to send request");
 
-    // Then: Response contains health status (unhealthy due to no backends)
-    assert_eq!(response.status(), 503);
+    // Then: Response contains health status (HTTP 200 with unhealthy status due to no backends)
+    assert_eq!(response.status(), 200);
 
     let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
     assert!(body.get("status").is_some(), "Missing status field");
     assert_eq!(body["status"], "unhealthy");
-    assert_eq!(body["servers"], 0);
+    assert_eq!(body["servers_total"], 0);
 }
 
 #[tokio::test]

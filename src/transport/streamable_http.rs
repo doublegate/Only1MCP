@@ -62,7 +62,8 @@ pub struct StreamableHttpTransport {
     /// Custom headers per configuration
     headers: HashMap<String, String>,
 
-    /// Connection timeout
+    /// Connection timeout (currently set on client, field reserved for per-request timeout control)
+    #[allow(dead_code)]
     timeout: Duration,
 }
 
@@ -334,9 +335,9 @@ impl StreamableHttpTransport {
         let mut data_lines = Vec::new();
 
         for line in body.lines() {
-            if line.starts_with("data:") {
+            if let Some(stripped) = line.strip_prefix("data:") {
                 // Extract JSON after "data: " prefix
-                let json_str = line["data:".len()..].trim();
+                let json_str = stripped.trim();
                 data_lines.push(json_str);
             }
         }

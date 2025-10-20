@@ -169,13 +169,6 @@ async fn main() -> Result<()> {
 
     info!("Only1MCP v{} starting...", env!("CARGO_PKG_VERSION"));
 
-    // Load configuration
-    let config = if let Some(config_path) = &cli.config {
-        config::Config::from_file(config_path)?
-    } else {
-        config::Config::discover_and_load()?
-    };
-
     // Execute command
     match cli.command {
         Commands::Start {
@@ -183,6 +176,9 @@ async fn main() -> Result<()> {
             port,
             foreground,
         } => {
+            // Load configuration with path tracking for Start command
+            let (config, config_path) =
+                config::Config::discover_and_load_with_path_tuple(cli.config.clone())?;
             use only1mcp::daemon::DaemonManager;
 
             let daemon_mgr = DaemonManager::new()?;
@@ -200,13 +196,7 @@ async fn main() -> Result<()> {
                     println!("Starting Only1MCP in daemon mode...");
                     println!("Log file: {}", daemon_mgr.get_log_path().display());
                     println!("PID file: {}", daemon_mgr.get_pid_path().display());
-                    println!(
-                        "Config: {}",
-                        cli.config
-                            .as_ref()
-                            .map(|p| p.display().to_string())
-                            .unwrap_or_else(|| "auto-discovered".to_string())
-                    );
+                    println!("Config: {}", config_path.display());
 
                     daemon_mgr.daemonize()?;
 
@@ -243,7 +233,7 @@ async fn main() -> Result<()> {
             modified_config.server.host = host.clone();
             modified_config.server.port = port;
 
-            let server = proxy::ProxyServer::new(modified_config).await?;
+            let server = proxy::ProxyServer::new(modified_config, config_path).await?;
 
             println!("Server listening on http://{}:{}", host, port);
 
@@ -314,6 +304,12 @@ async fn main() -> Result<()> {
         },
 
         Commands::List => {
+            let config = if let Some(config_path) = &cli.config {
+                config::Config::from_file(config_path)?
+            } else {
+                config::Config::discover_and_load()?
+            };
+
             println!("Configured MCP Servers:");
             for server in &config.servers {
                 println!(
@@ -335,7 +331,8 @@ async fn main() -> Result<()> {
 
         Commands::Test { id } => {
             println!("Testing connection to server: {}", id);
-            // TODO: Implement connection test
+            // Phase 3 feature: Connection testing with diagnostics
+            println!("  (Connection testing not yet implemented - planned for Phase 3)");
         },
 
         Commands::Status => {
@@ -355,20 +352,77 @@ async fn main() -> Result<()> {
                 },
                 ConfigCommands::Convert { from, to } => {
                     println!("Converting {} to {}", from.display(), to.display());
-                    // TODO: Implement format conversion
+                    // Phase 3 feature: YAML <-> TOML config conversion
+                    println!("  (Format conversion not yet implemented - planned for Phase 3)");
                 },
                 ConfigCommands::Doctor => {
                     println!("Running configuration diagnostics...");
-                    // TODO: Implement config doctor
+                    // Phase 3 feature: Config validation and diagnostics
+                    println!("  (Config doctor not yet implemented - planned for Phase 3)");
                 },
             }
         },
 
         Commands::Tui => {
+            use only1mcp::daemon::DaemonManager;
+            use only1mcp::tui::TuiClient;
+            use std::io::Write;
+
             info!("Starting TUI interface (Press 'q' or Ctrl+C to quit)");
 
-            // The TUI implementation is fully functional - wire it up!
-            // Implementation exists in src/tui/ with complete dashboard
+            // Default connection parameters (should match Start defaults)
+            let host = "127.0.0.1";
+            let port = 8080;
+
+            let daemon_mgr = DaemonManager::new()?;
+            let tui_client = TuiClient::new(host, port);
+
+            // Check if daemon is running
+            let daemon_was_running = tui_client.is_running().await;
+
+            if !daemon_was_running {
+                println!("Only1MCP daemon is not running.");
+                println!("Starting daemon automatically...\n");
+
+                // Discover and load config
+                let (config, config_path) =
+                    config::Config::discover_and_load_with_path_tuple(cli.config.clone())?;
+                println!("📁 Config: {}", config_path.display());
+
+                // Get host/port from config
+                let host = config.server.host.as_str();
+                let port = config.server.port;
+
+                // Start daemon
+                daemon_mgr.daemonize()?;
+
+                // Wait for daemon to initialize
+                println!("⏳ Waiting for daemon to start...");
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                // Poll for readiness (max 10 attempts = 5 seconds)
+                let tui_client = TuiClient::new(host, port);
+                let mut attempts = 0;
+                while !tui_client.is_running().await && attempts < 10 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    attempts += 1;
+                }
+
+                if !tui_client.is_running().await {
+                    eprintln!("\n❌ Failed to start Only1MCP daemon.");
+                    eprintln!("Check logs at: {}", daemon_mgr.get_log_path().display());
+                    std::process::exit(1);
+                }
+
+                println!("✅ Daemon started successfully.\n");
+            }
+
+            // Load configuration for TUI
+            let config = if let Some(config_path) = &cli.config {
+                config::Config::from_file(config_path)?
+            } else {
+                config::Config::discover_and_load()?
+            };
 
             // Create event channel for TUI communication
             let (_event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -380,6 +434,27 @@ async fn main() -> Result<()> {
             only1mcp::tui::run_tui(config_arc, event_rx).await?;
 
             info!("TUI interface closed");
+
+            // After TUI exits, prompt user about daemon
+            if !daemon_was_running {
+                print!("\n🛑 Stop Only1MCP daemon? [y/N]: ");
+                std::io::stdout().flush()?;
+
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+
+                if input.trim().to_lowercase() == "y" {
+                    println!("Stopping daemon...");
+                    daemon_mgr.stop()?;
+                    println!("✅ Only1MCP stopped.");
+                } else {
+                    println!("ℹ️  Daemon still running in background.");
+                    println!("   Use 'only1mcp stop' to stop it later.");
+                }
+            } else {
+                println!("\nℹ️  Daemon was already running before TUI launch.");
+                println!("   Use 'only1mcp stop' to stop it if needed.");
+            }
         },
 
         Commands::Benchmark {
@@ -390,7 +465,8 @@ async fn main() -> Result<()> {
                 "Running benchmark with {} requests and {} concurrent connections",
                 requests, concurrency
             );
-            // TODO: Implement benchmark
+            // Phase 3 feature: Performance benchmarking tool
+            println!("  (Benchmarking not yet implemented - planned for Phase 3)");
         },
     }
 

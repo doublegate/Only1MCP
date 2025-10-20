@@ -3,6 +3,7 @@
 //! Provides a real-time monitoring dashboard using ratatui framework.
 
 mod app;
+pub mod client;
 mod event;
 mod metrics;
 mod tabs;
@@ -12,5 +13,6 @@ mod ui;
 mod tests;
 
 pub use app::{run_tui, LogEntry, LogLevel, MetricsSnapshot, ServerInfo, ServerStatus, TuiApp};
+pub use client::TuiClient;
 pub use event::Event;
 pub use metrics::scrape_metrics;

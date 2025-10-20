@@ -186,3 +186,47 @@ pub type ServerId = String;
 
 /// Tool name
 pub type ToolName = String;
+
+// ============================================================================
+// Admin API Types
+// ============================================================================
+
+/// Server status information for Admin API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerStatus {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub transport: String,
+    pub tool_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health: Option<String>,
+}
+
+/// Tool information with server attribution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub server: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// System health status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthStatus {
+    pub status: String, // "healthy", "degraded", "unhealthy"
+    pub servers_total: usize,
+    pub servers_healthy: usize,
+    pub tools_total: usize,
+    pub uptime_seconds: u64,
+}
+
+/// System runtime information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub version: String,
+    pub config_path: String,
+    pub pid: u32,
+    pub uptime_seconds: u64,
+}

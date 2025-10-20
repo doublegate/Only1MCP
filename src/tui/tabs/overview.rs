@@ -51,8 +51,8 @@ fn draw_uptime_status(f: &mut Frame, area: Rect, app: &TuiApp) {
 }
 
 fn draw_requests_sparkline(f: &mut Frame, area: Rect, app: &TuiApp) {
-    // TODO: Track request history for sparkline
-    // For now, use placeholder data
+    // Phase 3 enhancement: Real-time request history tracking
+    // Using placeholder data for now (historical metrics not yet stored)
     let data: Vec<u64> = vec![10, 12, 15, 18, 22, 25, 28, 30, 32, 35, 38, 40];
 
     let sparkline = Sparkline::default()

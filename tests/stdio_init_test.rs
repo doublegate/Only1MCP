@@ -56,7 +56,7 @@ async fn test_stdio_sequential_thinking_initialization() {
     let tools_array = tools.get("tools").expect("Missing tools field");
     assert!(tools_array.is_array());
     assert!(
-        tools_array.as_array().unwrap().len() > 0,
+        !tools_array.as_array().unwrap().is_empty(),
         "No tools returned"
     );
 
@@ -122,7 +122,7 @@ async fn test_stdio_memory_initialization() {
     let tools_array = tools.get("tools").expect("Missing tools field");
     assert!(tools_array.is_array());
     let tools_list = tools_array.as_array().unwrap();
-    assert!(tools_list.len() > 0, "No tools returned");
+    assert!(!tools_list.is_empty(), "No tools returned");
 
     // Check for memory-specific tools
     let tool_names: Vec<String> = tools_list

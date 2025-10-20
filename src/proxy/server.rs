@@ -14,14 +14,15 @@
 
 use axum::{
     extract::State,
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     batching::BatchAggregator,
@@ -49,6 +50,10 @@ pub struct ProxyServer {
     metrics: Arc<Metrics>,
     /// Graceful shutdown handle
     shutdown_tx: tokio::sync::broadcast::Sender<()>,
+    /// Server start time (for uptime calculation)
+    start_time: std::time::Instant,
+    /// Path to configuration file (for Admin API)
+    config_path: std::path::PathBuf,
 }
 
 /// Shared application state passed to all handlers
@@ -64,6 +69,8 @@ pub struct AppState {
     pub streamable_http_transport:
         Option<Arc<crate::transport::streamable_http::StreamableHttpTransportPool>>,
     pub batch_aggregator: Arc<BatchAggregator>,
+    pub start_time: std::time::Instant,
+    pub config_path: std::path::PathBuf,
 }
 
 impl ProxyServer {
@@ -72,12 +79,13 @@ impl ProxyServer {
     /// # Arguments
     ///
     /// * `config` - Server configuration loaded from file or environment
+    /// * `config_path` - Path to the configuration file (for Admin API)
     ///
     /// # Returns
     ///
     /// * `Ok(ProxyServer)` - Initialized server ready to run
     /// * `Err(Error)` - Configuration or initialization error
-    pub async fn new(config: Config) -> Result<Self> {
+    pub async fn new(config: Config, config_path: std::path::PathBuf) -> Result<Self> {
         info!("Initializing Only1MCP proxy server");
 
         // Initialize shared application state
@@ -95,6 +103,8 @@ impl ProxyServer {
             cache,
             metrics,
             shutdown_tx,
+            start_time: std::time::Instant::now(),
+            config_path,
         })
     }
 
@@ -305,6 +315,8 @@ impl ProxyServer {
             sse_transport,
             streamable_http_transport,
             batch_aggregator,
+            start_time: self.start_time,
+            config_path: self.config_path.clone(),
         };
 
         // Build main MCP protocol routes
@@ -321,8 +333,11 @@ impl ProxyServer {
 
         // Management API routes
         let admin_routes = Router::new()
-            .route("/health", get(health_check_handler))
-            .route("/metrics", get(crate::metrics::metrics_handler));
+            .route("/health", get(admin_health))
+            .route("/metrics", get(crate::metrics::metrics_handler))
+            .route("/servers", get(admin_get_servers))
+            .route("/tools", get(admin_get_tools))
+            .route("/system", get(admin_system_info));
 
         // Combine routes with middleware stack
         Router::new()
@@ -404,13 +419,14 @@ impl ProxyServer {
             "Enabling configuration hot-reload for: {}",
             config_path.display()
         );
+        let config_path_clone = config_path.clone();
         let loader = ConfigLoader::new(config_path)?.watch()?;
 
         let config = loader.get_config();
         let mut reload_rx = loader.subscribe();
 
         // Create server
-        let server = Arc::new(Self::new(config.as_ref().clone()).await?);
+        let server = Arc::new(Self::new(config.as_ref().clone(), config_path_clone).await?);
 
         // Spawn reload handler
         let server_clone = server.clone();
@@ -712,6 +728,8 @@ impl ProxyServer {
             sse_transport,
             streamable_http_transport,
             batch_aggregator,
+            start_time: self.start_time,
+            config_path: self.config_path.clone(),
         }
     }
 
@@ -744,6 +762,253 @@ impl ProxyServer {
         );
 
         Ok(())
+    }
+}
+
+// ============================================================================
+// Admin API Handlers
+// ============================================================================
+
+/// GET /api/v1/admin/servers - List all configured servers
+async fn admin_get_servers(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<Vec<crate::types::ServerStatus>>, (StatusCode, String)> {
+    let config = state.config.as_ref();
+
+    let mut servers = Vec::new();
+
+    for server_config in &config.servers {
+        // Health tracking not yet implemented - always report as unknown
+        let health = Some("Unknown".to_string());
+
+        // Fetch tool count (best effort, don't fail if server is down)
+        let tool_count = fetch_tool_count_for_server(&state, &server_config.id).await.unwrap_or(0);
+
+        servers.push(crate::types::ServerStatus {
+            id: server_config.id.clone(),
+            name: server_config.name.clone(),
+            enabled: server_config.enabled,
+            transport: get_transport_name(&server_config.transport).to_string(),
+            tool_count,
+            health,
+        });
+    }
+
+    Ok(Json(servers))
+}
+
+/// GET /api/v1/admin/tools - List all tools from all servers
+async fn admin_get_tools(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<Vec<crate::types::ToolInfo>>, (StatusCode, String)> {
+    let config = state.config.as_ref();
+    let mut all_tools = Vec::new();
+
+    for server_config in &config.servers {
+        if !server_config.enabled {
+            continue;
+        }
+
+        // Fetch tools from this server (best effort)
+        match fetch_tools_for_server_internal(&state, &server_config.id).await {
+            Ok(tools) => {
+                for tool in tools {
+                    all_tools.push(crate::types::ToolInfo {
+                        name: tool.name,
+                        server: server_config.id.clone(),
+                        description: tool.description,
+                    });
+                }
+            },
+            Err(e) => {
+                warn!("Failed to fetch tools from {}: {}", server_config.id, e);
+            },
+        }
+    }
+
+    Ok(Json(all_tools))
+}
+
+/// GET /api/v1/admin/health - Overall system health
+async fn admin_health(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<crate::types::HealthStatus>, (StatusCode, String)> {
+    let config = state.config.as_ref();
+    let registry = state.registry.read().await;
+
+    let servers_total = config.servers.iter().filter(|s| s.enabled).count();
+
+    // Health tracking not yet fully implemented - count registered servers as healthy
+    let servers_healthy = registry.len();
+
+    // Count total tools (best effort)
+    let tools_total = count_all_tools(&state).await.unwrap_or(0);
+
+    // Determine overall status - simplified until health tracking is implemented
+    let status = if servers_total > 0 && servers_healthy > 0 {
+        "healthy"
+    } else if servers_healthy > 0 {
+        "degraded"
+    } else {
+        "unhealthy"
+    };
+
+    let uptime_seconds = state.start_time.elapsed().as_secs();
+
+    Ok(Json(crate::types::HealthStatus {
+        status: status.to_string(),
+        servers_total,
+        servers_healthy,
+        tools_total,
+        uptime_seconds,
+    }))
+}
+
+/// GET /api/v1/admin/system - System information
+async fn admin_system_info(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<crate::types::SystemInfo>, (StatusCode, String)> {
+    Ok(Json(crate::types::SystemInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        config_path: state.config_path.display().to_string(),
+        pid: std::process::id(),
+        uptime_seconds: state.start_time.elapsed().as_secs(),
+    }))
+}
+
+// ============================================================================
+// Admin API Helper Functions
+// ============================================================================
+
+/// Fetch tool count for a specific server
+async fn fetch_tool_count_for_server(
+    state: &AppState,
+    server_id: &str,
+) -> crate::error::Result<usize> {
+    let tools = fetch_tools_for_server_internal(state, server_id).await?;
+    Ok(tools.len())
+}
+
+/// Internal helper to fetch tools (reuses existing logic)
+async fn fetch_tools_for_server_internal(
+    state: &AppState,
+    server_id: &str,
+) -> crate::error::Result<Vec<Tool>> {
+    let config = state.config.as_ref();
+    let server_config = config
+        .servers
+        .iter()
+        .find(|s| s.id == server_id)
+        .ok_or_else(|| Error::Config(format!("Server not found: {}", server_id)))?;
+
+    // Create tools/list request
+    let request = McpRequest::new(
+        "tools/list",
+        serde_json::json!({}),
+        Some(serde_json::json!(1)),
+    );
+
+    // Fetch based on transport type (reuse display_loaded_servers logic)
+    let response = match &server_config.transport {
+        TransportConfig::Http { url, headers } => {
+            let http_transport = state
+                .http_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
+            http_transport
+                .send_request_with_headers(url, request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        TransportConfig::Sse { url, headers } => {
+            let sse_transport = state
+                .sse_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("SSE transport not initialized".into()))?;
+            sse_transport
+                .send_request_with_headers(url, request, headers.clone())
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+        TransportConfig::StreamableHttp {
+            url,
+            headers,
+            timeout_ms,
+        } => {
+            let streamable_http_transport =
+                state.streamable_http_transport.as_ref().ok_or_else(|| {
+                    Error::Transport("Streamable HTTP transport not initialized".into())
+                })?;
+
+            let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
+                url: url.clone(),
+                headers: headers.clone(),
+                timeout_ms: *timeout_ms,
+            };
+
+            let transport = streamable_http_transport.get_or_create(transport_config);
+            transport.send_request(request).await?
+        },
+        TransportConfig::Stdio { command, args, env } => {
+            let stdio_transport = state
+                .stdio_transport
+                .as_ref()
+                .ok_or_else(|| Error::Transport("STDIO transport not initialized".into()))?;
+
+            let stdio_config = crate::transport::stdio::StdioConfig {
+                command: command.clone(),
+                args: args.clone(),
+                env: env.clone(),
+                cwd: None,
+                timeout_ms: 30000,
+                max_memory_mb: Some(512),
+                max_cpu_percent: Some(50),
+                sandbox: true,
+            };
+
+            stdio_transport
+                .send_request_with_config(server_id.to_string(), &stdio_config, request)
+                .await
+                .map_err(|e| Error::Transport(e.to_string()))?
+        },
+    };
+
+    // Parse tools from response
+    let tools: Vec<Tool> = if let Some(result) = response.result {
+        serde_json::from_value(
+            result.get("tools").cloned().unwrap_or_else(|| serde_json::json!([])),
+        )
+        .map_err(|e| Error::Server(format!("Failed to parse tools: {}", e)))?
+    } else {
+        Vec::new()
+    };
+
+    Ok(tools)
+}
+
+/// Count total tools across all enabled servers
+async fn count_all_tools(state: &AppState) -> crate::error::Result<usize> {
+    let config = state.config.as_ref();
+    let mut total = 0;
+
+    for server_config in &config.servers {
+        if server_config.enabled {
+            if let Ok(count) = fetch_tool_count_for_server(state, &server_config.id).await {
+                total += count;
+            }
+        }
+    }
+
+    Ok(total)
+}
+
+/// Get human-readable transport name
+fn get_transport_name(transport: &TransportConfig) -> &'static str {
+    match transport {
+        TransportConfig::Http { .. } => "HTTP",
+        TransportConfig::Sse { .. } => "SSE",
+        TransportConfig::StreamableHttp { .. } => "Streamable HTTP",
+        TransportConfig::Stdio { .. } => "STDIO",
     }
 }
 
