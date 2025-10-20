@@ -2,7 +2,7 @@
 //!
 //! Tests session management, protocol compliance, and NWS server integration
 
-use only1mcp::transport::streamable_http::{StreamableHttpTransport, StreamableHttpConfig};
+use only1mcp::transport::streamable_http::{StreamableHttpConfig, StreamableHttpTransport};
 use only1mcp::types::McpRequest;
 use serde_json::json;
 use std::collections::HashMap;
@@ -10,7 +10,10 @@ use std::collections::HashMap;
 /// Test helper to create a basic transport config
 fn create_test_config(url: impl Into<String>) -> StreamableHttpConfig {
     let mut headers = HashMap::new();
-    headers.insert("Accept".into(), "application/json, text/event-stream".into());
+    headers.insert(
+        "Accept".into(),
+        "application/json, text/event-stream".into(),
+    );
     headers.insert("Content-Type".into(), "application/json".into());
 
     StreamableHttpConfig {
@@ -42,16 +45,27 @@ async fn test_streamable_http_session_management() {
     );
 
     let response = transport.send_request(init_request).await;
-    assert!(response.is_ok(), "Initialization should succeed: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Initialization should succeed: {:?}",
+        response.err()
+    );
 
     // After initialize, session ID should be stored
     let session_id = transport.get_session_id().await;
-    assert!(session_id.is_some(), "Session ID should be stored after initialization");
+    assert!(
+        session_id.is_some(),
+        "Session ID should be stored after initialization"
+    );
 
     // Send tools/list request (should use session ID)
     let tools_request = McpRequest::new("tools/list", json!({}), Some(json!(1)));
     let tools_response = transport.send_request(tools_request).await;
-    assert!(tools_response.is_ok(), "Tools list should succeed with session: {:?}", tools_response.err());
+    assert!(
+        tools_response.is_ok(),
+        "Tools list should succeed with session: {:?}",
+        tools_response.err()
+    );
 
     // Session ID should remain the same
     let session_id_after = transport.get_session_id().await;
@@ -96,7 +110,8 @@ async fn test_streamable_http_nws_tools() {
         .collect();
 
     assert!(
-        tool_names.contains(&"get-alerts".to_string()) || tool_names.contains(&"get-forecast".to_string()),
+        tool_names.contains(&"get-alerts".to_string())
+            || tool_names.contains(&"get-forecast".to_string()),
         "Should have NWS tools (get-alerts or get-forecast), got: {:?}",
         tool_names
     );
@@ -222,7 +237,10 @@ async fn test_streamable_http_pool_reuse() {
 async fn test_streamable_http_timeout_handling() {
     // Test with very short timeout (should timeout on real server)
     let mut headers = HashMap::new();
-    headers.insert("Accept".into(), "application/json, text/event-stream".into());
+    headers.insert(
+        "Accept".into(),
+        "application/json, text/event-stream".into(),
+    );
 
     let config = StreamableHttpConfig {
         url: "http://localhost:8124/mcp".to_string(),
@@ -244,7 +262,10 @@ async fn test_streamable_http_timeout_handling() {
 
     // Should fail due to timeout (if server exists) or connection refused
     let response = transport.send_request(request).await;
-    assert!(response.is_err(), "Should fail with short timeout or no server");
+    assert!(
+        response.is_err(),
+        "Should fail with short timeout or no server"
+    );
 }
 
 #[test]

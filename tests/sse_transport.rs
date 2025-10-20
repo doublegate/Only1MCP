@@ -32,9 +32,7 @@ async fn test_context7_tools_list() {
     };
 
     // Create transport
-    let transport = SseTransport::new(config)
-        .await
-        .expect("Failed to create SSE transport");
+    let transport = SseTransport::new(config).await.expect("Failed to create SSE transport");
 
     // Create tools/list request
     let request = McpRequest::new("tools/list", json!({}), Some(json!(1)));
@@ -46,7 +44,10 @@ async fn test_context7_tools_list() {
         .expect("Failed to send request to Context7");
 
     // Verify response structure
-    assert!(response.result.is_some(), "Response should have result field");
+    assert!(
+        response.result.is_some(),
+        "Response should have result field"
+    );
 
     let result = response.result.unwrap();
     assert!(
@@ -96,10 +97,7 @@ async fn test_sse_pool_caching() {
     );
 
     // First request creates transport
-    let transport1 = pool
-        .get_or_create(endpoint, headers.clone())
-        .await
-        .unwrap();
+    let transport1 = pool.get_or_create(endpoint, headers.clone()).await.unwrap();
 
     // Second request should return cached transport
     let transport2 = pool.get_or_create(endpoint, headers).await.unwrap();
@@ -164,9 +162,7 @@ async fn test_sse_error_handling_invalid_endpoint() {
 
     let request = McpRequest::new("tools/list", json!({}), Some(json!(1)));
 
-    let result = transport
-        .send_request("https://invalid.example.com", request)
-        .await;
+    let result = transport.send_request("https://invalid.example.com", request).await;
 
     assert!(result.is_err(), "Invalid endpoint should return error");
 }
@@ -184,12 +180,7 @@ async fn test_sse_error_handling_timeout() {
 
     let request = McpRequest::new("tools/list", json!({}), Some(json!(1)));
 
-    let result = transport
-        .send_request("https://httpbin.org/delay/10", request)
-        .await;
+    let result = transport.send_request("https://httpbin.org/delay/10", request).await;
 
-    assert!(
-        result.is_err(),
-        "Request should timeout with short timeout"
-    );
+    assert!(result.is_err(), "Request should timeout with short timeout");
 }

@@ -131,13 +131,7 @@ impl ManageConnection for HttpConnectionManager {
         // Some MCP servers like Context7 don't have a /health endpoint
         let health_url = format!("{}/health", self.base_url);
 
-        if let Ok(response) = self
-            .client
-            .get(&health_url)
-            .timeout(self.timeout)
-            .send()
-            .await
-        {
+        if let Ok(response) = self.client.get(&health_url).timeout(self.timeout).send().await {
             // If health endpoint exists but returns error (not 404), that's a problem
             if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
                 return Err(HttpError::HealthCheckFailed(response.status()));
@@ -361,11 +355,8 @@ impl HttpTransport {
         self.metrics.request_count.fetch_add(1, Ordering::Relaxed);
 
         // Send request with custom headers
-        let mut request_builder = conn
-            .client
-            .post(endpoint)
-            .json(&request)
-            .timeout(self.config.request_timeout);
+        let mut request_builder =
+            conn.client.post(endpoint).json(&request).timeout(self.config.request_timeout);
 
         // Apply custom headers from config
         for (key, value) in &conn.headers {
@@ -520,7 +511,8 @@ impl HttpTransportPool {
         endpoint: &str,
         request: crate::types::McpRequest,
     ) -> Result<crate::types::McpResponse, HttpError> {
-        self.send_request_with_headers(endpoint, request, std::collections::HashMap::new()).await
+        self.send_request_with_headers(endpoint, request, std::collections::HashMap::new())
+            .await
     }
 
     /// Send request to a specific endpoint with custom headers
@@ -543,7 +535,11 @@ impl HttpTransportPool {
         let start = Instant::now();
 
         // Get pooled connection
-        let conn = transport.pool.get().await.map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
+        let conn = transport
+            .pool
+            .get()
+            .await
+            .map_err(|e| HttpError::ConnectionFailed(e.to_string()))?;
 
         // Record attempt
         transport.metrics.request_count.fetch_add(1, Ordering::Relaxed);
@@ -566,25 +562,24 @@ impl HttpTransportPool {
             Ok(response) => {
                 if !response.status().is_success() {
                     let status = response.status();
-                    let body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                    let body =
+                        response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                     transport.metrics.error_count.fetch_add(1, Ordering::Relaxed);
                     return Err(HttpError::ServerError(format!("{}: {}", status, body)));
                 }
 
-                let mcp_response: crate::types::McpResponse = response
-                    .json()
-                    .await
-                    .map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
+                let mcp_response: crate::types::McpResponse =
+                    response.json().await.map_err(|e| HttpError::InvalidResponse(e.to_string()))?;
 
                 let elapsed = start.elapsed().as_micros() as u64;
                 transport.metrics.total_latency_us.fetch_add(elapsed, Ordering::Relaxed);
 
                 Ok(mcp_response)
-            }
+            },
             Err(e) => {
                 transport.metrics.error_count.fetch_add(1, Ordering::Relaxed);
                 Err(e.into())
-            }
+            },
         }
     }
 }

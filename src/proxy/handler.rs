@@ -622,11 +622,15 @@ async fn fetch_tools_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
-            let streamable_http_transport = state
-                .streamable_http_transport
-                .as_ref()
-                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+        crate::config::TransportConfig::StreamableHttp {
+            url,
+            headers,
+            timeout_ms,
+        } => {
+            let streamable_http_transport =
+                state.streamable_http_transport.as_ref().ok_or_else(|| {
+                    Error::Transport("Streamable HTTP transport not initialized".into())
+                })?;
 
             // Create transport config
             let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
@@ -722,11 +726,15 @@ async fn fetch_resources_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
-            let streamable_http_transport = state
-                .streamable_http_transport
-                .as_ref()
-                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+        crate::config::TransportConfig::StreamableHttp {
+            url,
+            headers,
+            timeout_ms,
+        } => {
+            let streamable_http_transport =
+                state.streamable_http_transport.as_ref().ok_or_else(|| {
+                    Error::Transport("Streamable HTTP transport not initialized".into())
+                })?;
 
             let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
                 url: url.clone(),
@@ -820,11 +828,15 @@ async fn fetch_prompts_from_server(
                 .await
                 .map_err(|e| Error::Transport(e.to_string()))?
         },
-        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
-            let streamable_http_transport = state
-                .streamable_http_transport
-                .as_ref()
-                .ok_or_else(|| Error::Transport("Streamable HTTP transport not initialized".into()))?;
+        crate::config::TransportConfig::StreamableHttp {
+            url,
+            headers,
+            timeout_ms,
+        } => {
+            let streamable_http_transport =
+                state.streamable_http_transport.as_ref().ok_or_else(|| {
+                    Error::Transport("Streamable HTTP transport not initialized".into())
+                })?;
 
             let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
                 url: url.clone(),

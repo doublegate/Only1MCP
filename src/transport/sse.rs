@@ -197,7 +197,8 @@ impl SseTransport {
         }
 
         // Parse JSON-RPC response
-        serde_json::from_str(&json_str).map_err(|e| SseError::InvalidJson(format!("{}: {}", e, json_str)))
+        serde_json::from_str(&json_str)
+            .map_err(|e| SseError::InvalidJson(format!("{}: {}", e, json_str)))
     }
 }
 
@@ -350,7 +351,8 @@ mod tests {
             client: Client::new(),
         };
 
-        let sse_text = "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n";
+        let sse_text =
+            "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}}\n\n";
         let response = transport.parse_sse_response(sse_text).unwrap();
 
         assert_eq!(response.jsonrpc, "2.0");
@@ -367,7 +369,8 @@ mod tests {
         };
 
         // SSE spec allows splitting data across multiple lines
-        let sse_text = "event: message\ndata: {\"jsonrpc\":\"2.0\",\ndata: \"id\":1,\"result\":{}}\n\n";
+        let sse_text =
+            "event: message\ndata: {\"jsonrpc\":\"2.0\",\ndata: \"id\":1,\"result\":{}}\n\n";
         let response = transport.parse_sse_response(sse_text).unwrap();
 
         assert_eq!(response.jsonrpc, "2.0");
@@ -403,7 +406,7 @@ mod tests {
         match result {
             Err(SseError::InvalidFormat(msg)) => {
                 assert!(msg.contains("No data found"));
-            }
+            },
             _ => panic!("Expected InvalidFormat error"),
         }
     }
@@ -421,7 +424,7 @@ mod tests {
 
         assert!(result.is_err());
         match result {
-            Err(SseError::InvalidJson(_)) => {}
+            Err(SseError::InvalidJson(_)) => {},
             _ => panic!("Expected InvalidJson error"),
         }
     }

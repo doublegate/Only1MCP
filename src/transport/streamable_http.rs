@@ -135,6 +135,8 @@ impl StreamableHttpTransport {
     /// Send request with session management.
     ///
     /// Automatically handles session ID storage and inclusion in requests.
+    /// If there's no active session and the request is not `initialize`,
+    /// automatically sends an `initialize` request first to establish the session.
     /// If a session error occurs (400/401), clears the session ID to force
     /// reinitialization on the next request.
     ///
@@ -147,6 +149,45 @@ impl StreamableHttpTransport {
     /// * `Ok(McpResponse)` - Successful response from server
     /// * `Err(StreamableHttpError)` - Network, protocol, or parsing error
     pub async fn send_request(
+        &self,
+        request: McpRequest,
+    ) -> Result<McpResponse, StreamableHttpError> {
+        // 0. Check if we need to initialize first
+        let needs_init = {
+            let session = self.session_id.read().await;
+            session.is_none() && request.method() != "initialize"
+        };
+
+        if needs_init {
+            info!("No session ID, sending initialize request first");
+
+            // Send initialize request to establish session
+            let init_request = McpRequest::new(
+                "initialize",
+                serde_json::json!({
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "Only1MCP",
+                        "version": "0.2.0"
+                    }
+                }),
+                Some(serde_json::json!(1)), // Use a simple numeric ID for init
+            );
+
+            // Send initialize and get session ID
+            let _init_response = self.send_request_internal(init_request).await?;
+            info!("Session initialized successfully");
+        }
+
+        // Now send the actual request with session
+        self.send_request_internal(request).await
+    }
+
+    /// Internal method to send a request without automatic initialization.
+    ///
+    /// This is used by `send_request` after handling initialization logic.
+    async fn send_request_internal(
         &self,
         request: McpRequest,
     ) -> Result<McpResponse, StreamableHttpError> {
@@ -312,8 +353,9 @@ impl StreamableHttpTransport {
         debug!("SSE data: {}", json_str);
 
         // Parse as JSON-RPC response
-        serde_json::from_str(&json_str)
-            .map_err(|e| StreamableHttpError::ParseError(format!("Failed to parse SSE data: {}", e)))
+        serde_json::from_str(&json_str).map_err(|e| {
+            StreamableHttpError::ParseError(format!("Failed to parse SSE data: {}", e))
+        })
     }
 
     /// Get the current session ID (if any).

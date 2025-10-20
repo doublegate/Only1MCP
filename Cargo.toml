@@ -128,6 +128,9 @@ sys-info = "0.9"
 # Command validation
 which = "6.0"
 
+# Directory traversal for NPX cache detection
+walkdir = "2.4"
+
 # TUI (Terminal User Interface)
 ratatui = "0.26"
 crossterm = "0.27"

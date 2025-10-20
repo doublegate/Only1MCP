@@ -61,7 +61,8 @@ pub struct AppState {
     pub http_transport: Option<Arc<crate::transport::http::HttpTransportPool>>,
     pub stdio_transport: Option<Arc<crate::transport::stdio::StdioTransport>>,
     pub sse_transport: Option<Arc<crate::transport::sse::SseTransportPool>>,
-    pub streamable_http_transport: Option<Arc<crate::transport::streamable_http::StreamableHttpTransportPool>>,
+    pub streamable_http_transport:
+        Option<Arc<crate::transport::streamable_http::StreamableHttpTransportPool>>,
     pub batch_aggregator: Arc<BatchAggregator>,
 }
 
@@ -123,19 +124,23 @@ impl ProxyServer {
             .any(|s| matches!(s.transport, crate::config::TransportConfig::Sse { .. }))
         {
             let sse_config = crate::transport::sse::SseTransportConfig::default();
-            Some(Arc::new(crate::transport::sse::SseTransportPool::new(sse_config)))
+            Some(Arc::new(crate::transport::sse::SseTransportPool::new(
+                sse_config,
+            )))
         } else {
             None
         };
 
         // Initialize Streamable HTTP transport if any streamable_http servers are configured
-        let streamable_http_transport = if self
-            .config
-            .servers
-            .iter()
-            .any(|s| matches!(s.transport, crate::config::TransportConfig::StreamableHttp { .. }))
-        {
-            Some(Arc::new(crate::transport::streamable_http::StreamableHttpTransportPool::new()))
+        let streamable_http_transport = if self.config.servers.iter().any(|s| {
+            matches!(
+                s.transport,
+                crate::config::TransportConfig::StreamableHttp { .. }
+            )
+        }) {
+            Some(Arc::new(
+                crate::transport::streamable_http::StreamableHttpTransportPool::new(),
+            ))
         } else {
             None
         };
@@ -174,7 +179,11 @@ impl ProxyServer {
                             tokio::task::block_in_place(|| {
                                 tokio::runtime::Handle::current().block_on(async {
                                     http_transport
-                                        .send_request_with_headers(url, request.clone(), headers.clone())
+                                        .send_request_with_headers(
+                                            url,
+                                            request.clone(),
+                                            headers.clone(),
+                                        )
                                         .await
                                         .map_err(|e| Error::Transport(e.to_string()))
                                 })
@@ -217,39 +226,50 @@ impl ProxyServer {
                         crate::config::TransportConfig::Sse { url, headers } => {
                             // Nesting required for: transport extraction → error handling
                             #[allow(clippy::excessive_nesting)]
-                            let sse_transport =
-                                sse_transport_clone.as_ref().ok_or_else(|| {
-                                    Error::Transport("SSE transport not initialized".into())
-                                })?;
+                            let sse_transport = sse_transport_clone.as_ref().ok_or_else(|| {
+                                Error::Transport("SSE transport not initialized".into())
+                            })?;
 
                             // Nesting required for: block_in_place → block_on async runtime bridge
                             #[allow(clippy::excessive_nesting)]
                             tokio::task::block_in_place(|| {
                                 tokio::runtime::Handle::current().block_on(async {
                                     sse_transport
-                                        .send_request_with_headers(url, request.clone(), headers.clone())
+                                        .send_request_with_headers(
+                                            url,
+                                            request.clone(),
+                                            headers.clone(),
+                                        )
                                         .await
                                         .map_err(|e| Error::Transport(e.to_string()))
                                 })
                             })?
                         },
-                        crate::config::TransportConfig::StreamableHttp { url, headers, timeout_ms } => {
+                        crate::config::TransportConfig::StreamableHttp {
+                            url,
+                            headers,
+                            timeout_ms,
+                        } => {
                             // Nesting required for: transport extraction → error handling
                             #[allow(clippy::excessive_nesting)]
                             let streamable_http_transport =
                                 streamable_http_transport_clone.as_ref().ok_or_else(|| {
-                                    Error::Transport("Streamable HTTP transport not initialized".into())
+                                    Error::Transport(
+                                        "Streamable HTTP transport not initialized".into(),
+                                    )
                                 })?;
 
                             // Create transport config for this server
-                            let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
-                                url: url.clone(),
-                                headers: headers.clone(),
-                                timeout_ms: *timeout_ms,
-                            };
+                            let transport_config =
+                                crate::transport::streamable_http::StreamableHttpConfig {
+                                    url: url.clone(),
+                                    headers: headers.clone(),
+                                    timeout_ms: *timeout_ms,
+                                };
 
                             // Get or create transport (maintains session)
-                            let transport = streamable_http_transport.get_or_create(transport_config);
+                            let transport =
+                                streamable_http_transport.get_or_create(transport_config);
 
                             // Nesting required for: block_in_place → block_on async runtime bridge
                             #[allow(clippy::excessive_nesting)]

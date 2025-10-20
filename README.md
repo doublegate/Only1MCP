@@ -3,13 +3,13 @@
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-117%2F117%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-121%2F121%20passing-brightgreen.svg)]()
 [![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
 [![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
 
-> **Status**: 🎉 **STDIO MCP Protocol Working!** Full MCP initialization handshake implemented - Sequential Thinking and Memory servers now functional! Phase 2 Complete with all 6 features + STDIO protocol compliance (2024-11-05) - 100% test pass rate (117/117)
+> **Status**: 🎉 **All 4 MCP Servers Operational!** STDIO, SSE, and Streamable HTTP transports working - 14 tools available across Context7, Sequential Thinking, Memory, and NWS Weather servers. Phase 2 Complete with all 6 features - 100% test pass rate (121/121)
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
@@ -45,11 +45,11 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 **Testing & Quality**
 
-- ✅ **117/117 Tests Passing** - 100% test success rate achieved
-- 🧪 **47 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, TUI interface, STDIO MCP init (new)
-- 🔬 **61 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE, TUI
-- 📚 **7 Doc Tests** - Inline code examples verified
-- 🆕 **2 STDIO Init Tests** - Sequential Thinking and Memory server initialization with full MCP handshake
+- ✅ **121/121 Tests Passing** - 100% test success rate achieved
+- 🧪 **51 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, Streamable HTTP transport, TUI interface, STDIO MCP init
+- 🔬 **62 Unit Tests** - JWT, OAuth, RBAC, circuit breaker, cache, load balancer, config validation, SSE, Streamable HTTP, TUI
+- 📚 **8 Doc Tests** - Inline code examples verified
+- 🆕 **Streamable HTTP Tests** - NWS Weather server integration with session management
 - 📝 **8,500+ Lines Documentation** - Comprehensive guides, API references, and implementation details
 
 **Supported Transports**
@@ -61,6 +61,12 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Multi-line SSE data concatenation
   - Automatic SSE protocol detection
   - Tested with Context7 MCP server integration
+- 🔄 **Streamable HTTP** - Modern MCP protocol (2025-03-26) with session management
+  - Automatic session initialization on first request
+  - UUID-based session ID tracking via headers
+  - Dual format support (JSON and SSE responses)
+  - Connection pooling with session persistence
+  - Tested with NWS Weather MCP server
 - 🔌 **WebSocket** - Full-duplex communication (Phase 3 planned)
 
 **Integrated MCP Servers**
@@ -77,6 +83,11 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Tools: `create_entities`, `add_observations`, `read_graph`, `search_nodes`, `open_nodes`, `create_relations`, `delete_entities`, `delete_observations`, `delete_relations`
   - Package: @modelcontextprotocol/server-memory
   - Status: ✅ Fully Functional (MCP protocol 2024-11-05)
+- ✅ **NWS Weather** - National Weather Service forecasts and alerts (Streamable HTTP transport)
+  - Tools: `get-forecast`, `get-alerts`
+  - Endpoint: http://localhost:8124/mcp
+  - Protocol: MCP 2025-03-26 (Streamable HTTP with session management)
+  - Status: ✅ Fully Functional (requires local server running)
 
 **Transport Support**
 
@@ -89,6 +100,11 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Connection state management (Spawned → Initializing → Ready → Closed)
   - Retry logic with exponential backoff (3 attempts)
   - Process pooling and reuse
+- ✅ **Streamable HTTP Servers** - MCP 2025-03-26 specification support
+  - Automatic session initialization (transparent to caller)
+  - Session ID persistence across requests via connection pooling
+  - Error recovery with automatic session reinitialization
+  - Dual format parsing (JSON and SSE responses)
 
 ### Phase 2 Features (✅ 100% Complete - 6/6 Features)
 

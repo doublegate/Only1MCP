@@ -14,4 +14,6 @@ pub mod streamable_http;
 pub mod websocket;
 
 // Re-export commonly used types
-pub use streamable_http::{StreamableHttpConfig, StreamableHttpTransport, StreamableHttpTransportPool};
+pub use streamable_http::{
+    StreamableHttpConfig, StreamableHttpTransport, StreamableHttpTransportPool,
+};

@@ -11,7 +11,10 @@ async fn test_stdio_sequential_thinking_initialization() {
 
     let config = StdioConfig {
         command: "npx".to_string(),
-        args: vec!["-y".to_string(), "@modelcontextprotocol/server-sequential-thinking".to_string()],
+        args: vec![
+            "-y".to_string(),
+            "@modelcontextprotocol/server-sequential-thinking".to_string(),
+        ],
         env: HashMap::new(),
         cwd: None,
         timeout_ms: 30000,
@@ -29,14 +32,16 @@ async fn test_stdio_sequential_thinking_initialization() {
     };
 
     // Send request (should trigger initialization automatically)
-    let result = transport.send_request_with_config(
-        "test-sequential-thinking".to_string(),
-        &config,
-        request,
-    ).await;
+    let result = transport
+        .send_request_with_config("test-sequential-thinking".to_string(), &config, request)
+        .await;
 
     // Check result
-    assert!(result.is_ok(), "Failed to get tools list: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to get tools list: {:?}",
+        result.err()
+    );
 
     let response = result.unwrap();
     println!("Response: {:?}", response);
@@ -50,12 +55,17 @@ async fn test_stdio_sequential_thinking_initialization() {
     // Should have sequentialthinking tool
     let tools_array = tools.get("tools").expect("Missing tools field");
     assert!(tools_array.is_array());
-    assert!(tools_array.as_array().unwrap().len() > 0, "No tools returned");
+    assert!(
+        tools_array.as_array().unwrap().len() > 0,
+        "No tools returned"
+    );
 
     // Check for sequentialthinking tool
-    let has_seq_thinking = tools_array.as_array().unwrap().iter().any(|tool| {
-        tool.get("name").and_then(|n| n.as_str()) == Some("sequentialthinking")
-    });
+    let has_seq_thinking = tools_array
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|tool| tool.get("name").and_then(|n| n.as_str()) == Some("sequentialthinking"));
     assert!(has_seq_thinking, "sequentialthinking tool not found");
 }
 
@@ -65,7 +75,10 @@ async fn test_stdio_memory_initialization() {
 
     let config = StdioConfig {
         command: "npx".to_string(),
-        args: vec!["-y".to_string(), "@modelcontextprotocol/server-memory".to_string()],
+        args: vec![
+            "-y".to_string(),
+            "@modelcontextprotocol/server-memory".to_string(),
+        ],
         env: HashMap::new(),
         cwd: None,
         timeout_ms: 30000,
@@ -83,14 +96,16 @@ async fn test_stdio_memory_initialization() {
     };
 
     // Send request (should trigger initialization automatically)
-    let result = transport.send_request_with_config(
-        "test-memory".to_string(),
-        &config,
-        request,
-    ).await;
+    let result = transport
+        .send_request_with_config("test-memory".to_string(), &config, request)
+        .await;
 
     // Check result
-    assert!(result.is_ok(), "Failed to get tools list: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to get tools list: {:?}",
+        result.err()
+    );
 
     let response = result.unwrap();
 
@@ -98,7 +113,10 @@ async fn test_stdio_memory_initialization() {
     assert!(response.result.is_some());
 
     let tools = response.result.unwrap();
-    println!("Memory tools: {}", serde_json::to_string_pretty(&tools).unwrap());
+    println!(
+        "Memory tools: {}",
+        serde_json::to_string_pretty(&tools).unwrap()
+    );
 
     // Should have memory tools
     let tools_array = tools.get("tools").expect("Missing tools field");
@@ -107,14 +125,17 @@ async fn test_stdio_memory_initialization() {
     assert!(tools_list.len() > 0, "No tools returned");
 
     // Check for memory-specific tools
-    let tool_names: Vec<String> = tools_list.iter()
+    let tool_names: Vec<String> = tools_list
+        .iter()
         .filter_map(|tool| tool.get("name").and_then(|n| n.as_str()))
         .map(|s| s.to_string())
         .collect();
 
     println!("Memory tool names: {:?}", tool_names);
-    assert!(tool_names.contains(&"create_entities".to_string()) ||
-            tool_names.contains(&"read_graph".to_string()) ||
-            tool_names.len() > 3,
-            "Expected memory tools not found");
+    assert!(
+        tool_names.contains(&"create_entities".to_string())
+            || tool_names.contains(&"read_graph".to_string())
+            || tool_names.len() > 3,
+        "Expected memory tools not found"
+    );
 }
