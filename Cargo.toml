@@ -77,8 +77,9 @@ figment = { version = "0.10", features = ["toml", "yaml", "env"] }
 notify = "6.1"
 notify-debouncer-full = "0.3"
 
-# Process management
-nix = { version = "0.27", features = ["process"] }
+# Process management and daemon
+daemonize = "0.5"
+nix = { version = "0.28", features = ["process", "signal"] }
 libc = "0.2"
 
 # Utilities

@@ -40,13 +40,20 @@ enum Commands {
     /// Start the proxy server
     Start {
         /// Server host
-        #[arg(long, default_value = "0.0.0.0")]
+        #[arg(long, default_value = "127.0.0.1")]
         host: String,
 
         /// Server port
         #[arg(long, default_value = "8080")]
         port: u16,
+
+        /// Run in foreground (do not daemonize)
+        #[arg(long, short = 'f')]
+        foreground: bool,
     },
+
+    /// Stop a running daemon instance
+    Stop,
 
     /// Validate configuration file
     Validate {
@@ -171,10 +178,122 @@ async fn main() -> Result<()> {
 
     // Execute command
     match cli.command {
-        Commands::Start { host, port } => {
+        Commands::Start {
+            host,
+            port,
+            foreground,
+        } => {
+            use only1mcp::daemon::DaemonManager;
+
+            let daemon_mgr = DaemonManager::new()?;
+
+            // Check if already running
+            if daemon_mgr.is_running() {
+                eprintln!("Only1MCP is already running. Use 'only1mcp stop' to stop it first.");
+                std::process::exit(1);
+            }
+
+            // Daemonize if not in foreground mode
+            if !foreground {
+                #[cfg(unix)]
+                {
+                    println!("Starting Only1MCP in daemon mode...");
+                    println!("Log file: {}", daemon_mgr.get_log_path().display());
+                    println!("PID file: {}", daemon_mgr.get_pid_path().display());
+                    println!(
+                        "Config: {}",
+                        cli.config
+                            .as_ref()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|| "auto-discovered".to_string())
+                    );
+
+                    daemon_mgr.daemonize()?;
+
+                    // After daemonization, we're in the child process
+                    // Redirect logging to file
+                    let log_file = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(daemon_mgr.get_log_path())?;
+
+                    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+                    let filter = EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| EnvFilter::new(&cli.log_level));
+
+                    tracing_subscriber::registry()
+                        .with(filter)
+                        .with(fmt::layer().with_writer(log_file).with_ansi(false))
+                        .init();
+                }
+
+                #[cfg(not(unix))]
+                {
+                    eprintln!(
+                        "Daemon mode is not supported on this platform. Use --foreground flag."
+                    );
+                    std::process::exit(1);
+                }
+            }
+
             info!("Starting proxy server on {}:{}", host, port);
-            let server = proxy::ProxyServer::new(config).await?;
-            server.run().await?;
+
+            // Create server (config already loaded above)
+            let mut modified_config = config.clone();
+            modified_config.server.host = host.clone();
+            modified_config.server.port = port;
+
+            let server = proxy::ProxyServer::new(modified_config).await?;
+
+            println!("Server listening on http://{}:{}", host, port);
+
+            // Display or log loaded servers
+            if foreground {
+                server.display_loaded_servers().await?;
+            } else {
+                server.log_loaded_servers().await?;
+            }
+
+            // Setup signal handlers for graceful shutdown
+            let (_shutdown_tx, mut shutdown_rx) =
+                only1mcp::daemon::signals::setup_signal_handlers();
+
+            // Run server with graceful shutdown
+            let router = server.build_router_public();
+
+            let addr = format!("{}:{}", host, port)
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| error::Error::Config(format!("Invalid address: {}", e)))?;
+            let listener = tokio::net::TcpListener::bind(addr)
+                .await
+                .map_err(|e| error::Error::Server(format!("Failed to bind: {}", e)))?;
+
+            info!("Server listening on {}", addr);
+
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async move {
+                    let _ = shutdown_rx.recv().await;
+                    info!("Shutting down proxy server gracefully...");
+                })
+                .await
+                .map_err(|e| error::Error::Server(format!("Server error: {}", e)))?;
+
+            info!("Proxy server stopped");
+        },
+
+        Commands::Stop => {
+            use only1mcp::daemon::DaemonManager;
+
+            let daemon_mgr = DaemonManager::new()?;
+
+            if !daemon_mgr.is_running() {
+                println!("No running Only1MCP instance found.");
+                std::process::exit(1);
+            }
+
+            println!("Stopping Only1MCP...");
+            daemon_mgr.stop()?;
+            println!("Only1MCP stopped successfully.");
         },
 
         Commands::Validate {

@@ -420,26 +420,81 @@ impl Config {
 
     /// Discover and load configuration from standard locations
     pub fn discover_and_load() -> Result<Self> {
-        // Check standard locations
-        let mut search_paths = vec![
-            PathBuf::from("only1mcp.yaml"),
-            PathBuf::from("only1mcp.toml"),
-        ];
+        Self::discover_and_load_with_path(None)
+    }
 
-        if let Some(home) = dirs::home_dir() {
-            search_paths.push(home.join(".only1mcp/config.yaml"));
+    /// Discover and load configuration from standard locations with optional CLI override
+    pub fn discover_and_load_with_path(cli_path: Option<PathBuf>) -> Result<Self> {
+        use tracing::{info, warn};
+
+        // 1. CLI flag (highest priority)
+        if let Some(path) = cli_path {
+            info!("Using config from CLI path: {:?}", path);
+            return Self::from_file(&path);
         }
 
-        search_paths.push(PathBuf::from("/etc/only1mcp/config.yaml"));
+        // 2. XDG_CONFIG_HOME (new default)
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg_config).join("only1mcp")
+        } else {
+            dirs::home_dir()
+                .ok_or_else(|| Error::Config("Cannot determine home directory".into()))?
+                .join(".config")
+                .join("only1mcp")
+        };
 
-        for path in search_paths {
-            if path.exists() {
-                return Self::from_file(&path);
+        let config_path = config_dir.join("only1mcp.yaml");
+
+        if config_path.exists() {
+            info!("Using config from: {:?}", config_path);
+            return Self::from_file(&config_path);
+        }
+
+        // 3. Legacy paths (for backwards compatibility)
+        let mut legacy_paths = vec![
+            PathBuf::from("only1mcp.yaml"), // Current directory
+            PathBuf::from("only1mcp.toml"), // Current directory
+        ];
+
+        // Add home directory path if available
+        if let Some(home) = dirs::home_dir() {
+            legacy_paths.push(home.join(".only1mcp/config.yaml"));
+        }
+
+        // Add system-wide path
+        legacy_paths.push(PathBuf::from("/etc/only1mcp/config.yaml"));
+
+        for legacy_path in legacy_paths {
+            if legacy_path.exists() {
+                warn!("Using legacy config path: {:?}", legacy_path);
+                warn!("Consider migrating to: {:?}", config_path);
+                return Self::from_file(&legacy_path);
             }
         }
 
-        // Return minimal default config
-        Ok(Self::default())
+        // 4. Create default config from template
+        info!("No config found, creating default at: {:?}", config_path);
+        Self::create_default_config(&config_path)?;
+        Self::from_file(&config_path)
+    }
+
+    /// Create default configuration file from embedded template
+    fn create_default_config(path: &Path) -> Result<()> {
+        use std::fs;
+
+        // Create parent directory
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| Error::Config(format!("Failed to create config directory: {}", e)))?;
+        }
+
+        // Embedded default config (solo.yaml template)
+        let default_config = include_str!("../../config/templates/solo.yaml");
+
+        fs::write(path, default_config)
+            .map_err(|e| Error::Config(format!("Failed to write default config: {}", e)))?;
+
+        Ok(())
     }
 
     /// Validate configuration file

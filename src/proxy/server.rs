@@ -26,14 +26,14 @@ use tracing::info;
 use crate::{
     batching::BatchAggregator,
     cache::ResponseCache,
-    config::Config,
+    config::{Config, TransportConfig},
     error::{Error, Result},
     metrics::Metrics,
     proxy::{
         handler::{handle_jsonrpc_request, handle_websocket_upgrade},
         router::ServerRegistry,
     },
-    types::McpRequest,
+    types::{McpRequest, Tool},
 };
 
 /// Main proxy server structure containing all shared state and configuration.
@@ -96,6 +96,11 @@ impl ProxyServer {
             metrics,
             shutdown_tx,
         })
+    }
+
+    /// Build the Axum router with all routes and middleware (public for CLI).
+    pub fn build_router_public(&self) -> Router {
+        self.build_router()
     }
 
     /// Build the Axum router with all routes and middleware.
@@ -426,6 +431,288 @@ impl ProxyServer {
         // Run server (we need to extract it from Arc)
         let server_owned = Arc::try_unwrap(server).unwrap_or_else(|arc| (*arc).clone());
         server_owned.run().await
+    }
+
+    /// Display loaded servers and tools (for foreground mode)
+    pub async fn display_loaded_servers(&self) -> Result<()> {
+        println!("\nMCP Servers Loaded:");
+
+        let mut total_tools = 0;
+        let mut enabled_count = 0;
+
+        for server_config in &self.config.servers {
+            if !server_config.enabled {
+                continue;
+            }
+
+            enabled_count += 1;
+
+            // Fetch tools from this server
+            let tools = match self.fetch_tools_for_server(&server_config.id).await {
+                Ok(tools) => tools,
+                Err(e) => {
+                    println!("  ✗ {} - Error: {}", server_config.name, e);
+                    continue;
+                },
+            };
+
+            total_tools += tools.len();
+
+            let transport_type = Self::get_transport_name(&server_config.transport);
+
+            println!(
+                "  ✓ {} ({}) - {} tool{}",
+                server_config.name,
+                transport_type,
+                tools.len(),
+                if tools.len() == 1 { "" } else { "s" }
+            );
+
+            // Display tool names (wrapped at 80 chars)
+            if !tools.is_empty() {
+                let tool_names: Vec<String> = tools.iter().map(|t| t.name.clone()).collect();
+
+                let formatted = Self::format_tool_list(&tool_names, 4);
+                println!("{}", formatted);
+            }
+        }
+
+        println!(
+            "\nTotal: {} tools available across {} server{}",
+            total_tools,
+            enabled_count,
+            if enabled_count == 1 { "" } else { "s" }
+        );
+
+        Ok(())
+    }
+
+    /// Log loaded servers (for daemon mode)
+    pub async fn log_loaded_servers(&self) -> Result<()> {
+        let mut total_tools = 0;
+
+        for server_config in &self.config.servers {
+            if !server_config.enabled {
+                continue;
+            }
+
+            match self.fetch_tools_for_server(&server_config.id).await {
+                Ok(tools) => {
+                    total_tools += tools.len();
+                    info!(
+                        "Loaded server '{}' ({}) with {} tools",
+                        server_config.name,
+                        Self::get_transport_name(&server_config.transport),
+                        tools.len()
+                    );
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to load server '{}': {}", server_config.name, e);
+                },
+            }
+        }
+
+        info!("Total: {} tools available", total_tools);
+        Ok(())
+    }
+
+    /// Fetch tools for a specific server (for display purposes)
+    async fn fetch_tools_for_server(&self, server_id: &str) -> Result<Vec<Tool>> {
+        let server_config = self
+            .config
+            .servers
+            .iter()
+            .find(|s| s.id == server_id)
+            .ok_or_else(|| Error::Config(format!("Server not found: {}", server_id)))?;
+
+        // Build app state for transport access
+        let app_state = self.build_app_state();
+
+        // Use existing handler logic to fetch tools
+        let request = McpRequest::new(
+            "tools/list",
+            serde_json::json!({}),
+            Some(serde_json::json!(1)),
+        );
+
+        // Fetch from backend (reuse existing transport logic)
+        let response = match &server_config.transport {
+            TransportConfig::Http { url, headers } => {
+                let http_transport = app_state
+                    .http_transport
+                    .as_ref()
+                    .ok_or_else(|| Error::Transport("HTTP transport not initialized".into()))?;
+                http_transport
+                    .send_request_with_headers(url, request, headers.clone())
+                    .await
+                    .map_err(|e| Error::Transport(e.to_string()))?
+            },
+            TransportConfig::Sse { url, headers } => {
+                let sse_transport = app_state
+                    .sse_transport
+                    .as_ref()
+                    .ok_or_else(|| Error::Transport("SSE transport not initialized".into()))?;
+                sse_transport
+                    .send_request_with_headers(url, request, headers.clone())
+                    .await
+                    .map_err(|e| Error::Transport(e.to_string()))?
+            },
+            TransportConfig::StreamableHttp {
+                url,
+                headers,
+                timeout_ms,
+            } => {
+                let streamable_http_transport =
+                    app_state.streamable_http_transport.as_ref().ok_or_else(|| {
+                        Error::Transport("Streamable HTTP transport not initialized".into())
+                    })?;
+
+                let transport_config = crate::transport::streamable_http::StreamableHttpConfig {
+                    url: url.clone(),
+                    headers: headers.clone(),
+                    timeout_ms: *timeout_ms,
+                };
+
+                let transport = streamable_http_transport.get_or_create(transport_config);
+                transport.send_request(request).await?
+            },
+            TransportConfig::Stdio { command, args, env } => {
+                let stdio_transport = app_state
+                    .stdio_transport
+                    .as_ref()
+                    .ok_or_else(|| Error::Transport("STDIO transport not initialized".into()))?;
+
+                let stdio_config = crate::transport::stdio::StdioConfig {
+                    command: command.clone(),
+                    args: args.clone(),
+                    env: env.clone(),
+                    cwd: None,
+                    timeout_ms: 30000,
+                    max_memory_mb: Some(512),
+                    max_cpu_percent: Some(50),
+                    sandbox: true,
+                };
+
+                stdio_transport
+                    .send_request_with_config(server_id.to_string(), &stdio_config, request)
+                    .await
+                    .map_err(|e| Error::Transport(e.to_string()))?
+            },
+        };
+
+        // Parse tools from response
+        let tools: Vec<Tool> = if let Some(result) = response.result {
+            serde_json::from_value(result.get("tools").cloned().unwrap_or(serde_json::json!([])))?
+        } else {
+            Vec::new()
+        };
+
+        Ok(tools)
+    }
+
+    /// Get human-readable transport name
+    fn get_transport_name(transport: &TransportConfig) -> &'static str {
+        match transport {
+            TransportConfig::Http { .. } => "HTTP",
+            TransportConfig::Sse { .. } => "SSE",
+            TransportConfig::StreamableHttp { .. } => "Streamable HTTP",
+            TransportConfig::Stdio { .. } => "STDIO",
+        }
+    }
+
+    /// Format tool list with wrapping at max_width
+    fn format_tool_list(tools: &[String], indent: usize) -> String {
+        let indent_str = " ".repeat(indent);
+        let max_width = 76 - indent; // 80 chars total - indent
+
+        let mut result = String::new();
+        let mut current_line = String::new();
+
+        for (i, tool) in tools.iter().enumerate() {
+            let separator = if i < tools.len() - 1 { ", " } else { "" };
+            let item = format!("{}{}", tool, separator);
+
+            if current_line.len() + item.len() > max_width && !current_line.is_empty() {
+                // Flush current line
+                result.push_str(&format!(
+                    "{}- {}\n",
+                    indent_str,
+                    current_line.trim_end_matches(", ")
+                ));
+                current_line.clear();
+            }
+
+            current_line.push_str(&item);
+        }
+
+        if !current_line.is_empty() {
+            result.push_str(&format!(
+                "{}- {}",
+                indent_str,
+                current_line.trim_end_matches(", ")
+            ));
+        }
+
+        result
+    }
+
+    /// Build AppState for internal use (needed for fetch_tools_for_server)
+    fn build_app_state(&self) -> AppState {
+        // Initialize transports (same logic as build_router)
+        let http_transport = Some(Arc::new(crate::transport::http::HttpTransportPool::new()));
+
+        let stdio_transport = if self
+            .config
+            .servers
+            .iter()
+            .any(|s| matches!(s.transport, TransportConfig::Stdio { .. }))
+        {
+            Some(Arc::new(crate::transport::stdio::StdioTransport::new()))
+        } else {
+            None
+        };
+
+        let sse_transport = if self
+            .config
+            .servers
+            .iter()
+            .any(|s| matches!(s.transport, TransportConfig::Sse { .. }))
+        {
+            let sse_config = crate::transport::sse::SseTransportConfig::default();
+            Some(Arc::new(crate::transport::sse::SseTransportPool::new(
+                sse_config,
+            )))
+        } else {
+            None
+        };
+
+        let streamable_http_transport = if self
+            .config
+            .servers
+            .iter()
+            .any(|s| matches!(s.transport, TransportConfig::StreamableHttp { .. }))
+        {
+            Some(Arc::new(
+                crate::transport::streamable_http::StreamableHttpTransportPool::new(),
+            ))
+        } else {
+            None
+        };
+
+        let batch_config = self.config.context_optimization.batching.clone();
+        let batch_aggregator = Arc::new(BatchAggregator::new(batch_config));
+
+        AppState {
+            config: self.config.clone(),
+            registry: self.registry.clone(),
+            cache: self.cache.clone(),
+            metrics: self.metrics.clone(),
+            http_transport,
+            stdio_transport,
+            sse_transport,
+            streamable_http_transport,
+            batch_aggregator,
+        }
     }
 
     /// Update server configuration during hot-reload
