@@ -1,11 +1,13 @@
 //! In-memory storage for audit events with efficient querying
 
-use super::{AuditEvent, AuditEventType, AuditFilter, Severity};
-use chrono::{DateTime, Utc};
+use super::{AuditEvent, AuditFilter};
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+#[cfg(test)]
+use chrono::Utc;
 
 /// Maximum events to keep in memory (circular buffer)
 const MAX_MEMORY_EVENTS: usize = 10000;

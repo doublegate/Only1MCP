@@ -69,6 +69,7 @@ pub struct AppState {
     pub streamable_http_transport:
         Option<Arc<crate::transport::streamable_http::StreamableHttpTransportPool>>,
     pub batch_aggregator: Arc<BatchAggregator>,
+    pub jwt_manager: Option<Arc<crate::auth::jwt::JwtManager>>,
     pub start_time: std::time::Instant,
     pub config_path: std::path::PathBuf,
 }
@@ -304,6 +305,21 @@ impl ProxyServer {
             ))
         };
 
+        // Initialize JWT manager (for auth endpoints)
+        // TODO: Move secret to secure configuration (env var or secrets manager)
+        let jwt_config = crate::auth::jwt::JwtConfig::default();
+        let jwt_secret = b"CHANGE_THIS_IN_PRODUCTION_USE_ENV_VAR_OR_SECRETS_MANAGER_MIN_32_BYTES";
+        let jwt_manager = match crate::auth::jwt::JwtManager::new(jwt_config, jwt_secret) {
+            Ok(manager) => Some(Arc::new(manager)),
+            Err(e) => {
+                tracing::warn!("Failed to initialize JWT manager: {}. Auth endpoints will be disabled.", e);
+                None
+            },
+        };
+
+        // Store whether auth is enabled before moving jwt_manager
+        let auth_enabled = jwt_manager.is_some();
+
         // Create shared application state
         let app_state = AppState {
             config: self.config.clone(),
@@ -315,6 +331,7 @@ impl ProxyServer {
             sse_transport,
             streamable_http_transport,
             batch_aggregator,
+            jwt_manager,
             start_time: self.start_time,
             config_path: self.config_path.clone(),
         };
@@ -331,6 +348,17 @@ impl ProxyServer {
             // Health check
             .route("/health", get(health_check_handler));
 
+        // Authentication routes (if JWT manager is available)
+        let auth_routes = if auth_enabled {
+            Router::new()
+                .route("/login", post(auth_login_wrapper))
+                .route("/refresh", post(auth_refresh_wrapper))
+                .route("/logout", post(auth_logout_wrapper))
+                .route("/verify", get(auth_verify_wrapper))
+        } else {
+            Router::new()
+        };
+
         // Management API routes
         let admin_routes = Router::new()
             .route("/health", get(admin_health))
@@ -342,6 +370,7 @@ impl ProxyServer {
         // Combine routes with middleware stack
         Router::new()
             .nest("/", mcp_routes)
+            .nest("/api/v1/auth", auth_routes)
             .nest("/api/v1/admin", admin_routes)
             .with_state(app_state)
             // Apply middleware in reverse order (innermost first)
@@ -718,6 +747,13 @@ impl ProxyServer {
         let batch_config = self.config.context_optimization.batching.clone();
         let batch_aggregator = Arc::new(BatchAggregator::new(batch_config));
 
+        // Initialize JWT manager (for internal use)
+        let jwt_config = crate::auth::jwt::JwtConfig::default();
+        let jwt_secret = b"CHANGE_THIS_IN_PRODUCTION_USE_ENV_VAR_OR_SECRETS_MANAGER_MIN_32_BYTES";
+        let jwt_manager = crate::auth::jwt::JwtManager::new(jwt_config, jwt_secret)
+            .ok()
+            .map(Arc::new);
+
         AppState {
             config: self.config.clone(),
             registry: self.registry.clone(),
@@ -728,6 +764,7 @@ impl ProxyServer {
             sse_transport,
             streamable_http_transport,
             batch_aggregator,
+            jwt_manager,
             start_time: self.start_time,
             config_path: self.config_path.clone(),
         }
@@ -1031,4 +1068,80 @@ async fn health_check_handler(State(state): State<AppState>) -> impl IntoRespons
             "version": env!("CARGO_PKG_VERSION"),
         })),
     )
+}
+
+// ============================================================================
+// Auth API Handler Wrappers
+// ============================================================================
+
+/// Wrapper for login_handler that extracts JWT manager from AppState
+async fn auth_login_wrapper(
+    State(state): State<AppState>,
+    payload: Json<crate::auth::handlers::LoginRequest>,
+) -> std::result::Result<
+    Json<crate::auth::handlers::LoginResponse>,
+    crate::auth::handlers::ErrorResponse,
+> {
+    let jwt_manager = state.jwt_manager.ok_or_else(|| {
+        crate::auth::handlers::ErrorResponse {
+            error: "Authentication not configured".to_string(),
+            code: 503,
+        }
+    })?;
+
+    crate::auth::handlers::login_handler(State(jwt_manager), payload).await
+}
+
+/// Wrapper for refresh_handler that extracts JWT manager from AppState
+async fn auth_refresh_wrapper(
+    State(state): State<AppState>,
+    payload: Json<crate::auth::handlers::RefreshRequest>,
+) -> std::result::Result<
+    Json<crate::auth::handlers::LoginResponse>,
+    crate::auth::handlers::ErrorResponse,
+> {
+    let jwt_manager = state.jwt_manager.ok_or_else(|| {
+        crate::auth::handlers::ErrorResponse {
+            error: "Authentication not configured".to_string(),
+            code: 503,
+        }
+    })?;
+
+    crate::auth::handlers::refresh_handler(State(jwt_manager), payload).await
+}
+
+/// Wrapper for logout_handler that extracts JWT manager from AppState
+async fn auth_logout_wrapper(
+    State(state): State<AppState>,
+    payload: Json<crate::auth::handlers::LogoutRequest>,
+) -> std::result::Result<
+    Json<crate::auth::handlers::SuccessResponse>,
+    crate::auth::handlers::ErrorResponse,
+> {
+    let jwt_manager = state.jwt_manager.ok_or_else(|| {
+        crate::auth::handlers::ErrorResponse {
+            error: "Authentication not configured".to_string(),
+            code: 503,
+        }
+    })?;
+
+    crate::auth::handlers::logout_handler(State(jwt_manager), payload).await
+}
+
+/// Wrapper for verify_handler that extracts JWT manager from AppState
+async fn auth_verify_wrapper(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> std::result::Result<
+    Json<crate::auth::handlers::VerifyResponse>,
+    crate::auth::handlers::ErrorResponse,
+> {
+    let jwt_manager = state.jwt_manager.ok_or_else(|| {
+        crate::auth::handlers::ErrorResponse {
+            error: "Authentication not configured".to_string(),
+            code: 503,
+        }
+    })?;
+
+    crate::auth::handlers::verify_handler(State(jwt_manager), headers).await
 }

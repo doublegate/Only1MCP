@@ -81,7 +81,7 @@ impl Default for JwtConfig {
 }
 
 /// JWT claims structure
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     /// Subject (user ID)
     pub sub: String,

@@ -173,7 +173,7 @@ impl RateLimiter {
         }
 
         // Check global limit first
-        if let Some(mut global) = self.global_bucket.write().await.as_mut() {
+        if let Some(global) = self.global_bucket.write().await.as_mut() {
             if !global.try_consume() {
                 let reset_in = global.time_until_refill() as u64;
                 return RateLimitResult::Limited {
