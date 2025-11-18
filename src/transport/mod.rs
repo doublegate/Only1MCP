@@ -8,6 +8,7 @@
 //! - WebSocket (full-duplex)
 
 pub mod http;
+pub mod sandbox;
 pub mod sse;
 pub mod stdio;
 pub mod streamable_http;
