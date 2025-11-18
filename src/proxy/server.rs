@@ -359,13 +359,24 @@ impl ProxyServer {
             Router::new()
         };
 
-        // Management API routes
-        let admin_routes = Router::new()
+        // Management API routes (protected by optional auth if enabled)
+        let mut admin_routes = Router::new()
             .route("/health", get(admin_health))
             .route("/metrics", get(crate::metrics::metrics_handler))
             .route("/servers", get(admin_get_servers))
             .route("/tools", get(admin_get_tools))
             .route("/system", get(admin_system_info));
+
+        // Apply auth middleware to admin routes if JWT is configured
+        // Note: For production, admin endpoints should always require authentication
+        // For development/testing, auth can be disabled by not configuring JWT
+        if auth_enabled {
+            use axum::middleware::from_fn_with_state;
+            admin_routes = admin_routes.layer(from_fn_with_state(
+                app_state.clone(),
+                admin_auth_middleware,
+            ));
+        }
 
         // Combine routes with middleware stack
         Router::new()
@@ -1068,6 +1079,93 @@ async fn health_check_handler(State(state): State<AppState>) -> impl IntoRespons
             "version": env!("CARGO_PKG_VERSION"),
         })),
     )
+}
+
+// ============================================================================
+// Auth Middleware
+// ============================================================================
+
+/// Admin auth middleware - requires valid JWT for admin endpoints
+async fn admin_auth_middleware(
+    State(state): State<AppState>,
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+
+    // Get JWT manager from state
+    let jwt_manager = match state.jwt_manager.as_ref() {
+        Some(mgr) => mgr,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Authentication not configured",
+                    "code": 500,
+                })),
+            )
+                .into_response();
+        },
+    };
+
+    // Extract token from Authorization header
+    let token = match request
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+    {
+        Some(header_value) => {
+            // Try Bearer prefix first
+            if let Some(token) = header_value.strip_prefix("Bearer ") {
+                token.to_string()
+            } else if let Some(token) = header_value.strip_prefix("bearer ") {
+                token.to_string()
+            } else {
+                header_value.to_string()
+            }
+        },
+        None => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({
+                    "error": "Missing authorization header",
+                    "code": 401,
+                })),
+            )
+                .into_response();
+        },
+    };
+
+    // Validate token
+    let claims = match jwt_manager.validate_token(&token).await {
+        Ok(claims) => claims,
+        Err(e) => {
+            let (status, message) = match e {
+                crate::auth::jwt::Error::ExpiredToken => {
+                    (StatusCode::UNAUTHORIZED, "Token has expired")
+                },
+                crate::auth::jwt::Error::RevokedToken => {
+                    (StatusCode::UNAUTHORIZED, "Token has been revoked")
+                },
+                _ => (StatusCode::UNAUTHORIZED, "Invalid token"),
+            };
+
+            return (
+                status,
+                Json(serde_json::json!({
+                    "error": message,
+                    "code": status.as_u16(),
+                })),
+            )
+                .into_response();
+        },
+    };
+
+    // Attach claims to request for handlers to access
+    request.extensions_mut().insert(claims);
+
+    // Continue to the next middleware/handler
+    next.run(request).await
 }
 
 // ============================================================================
