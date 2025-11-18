@@ -13,6 +13,8 @@ pub mod cache;
 pub mod config;
 pub mod daemon;
 pub mod error;
+// pub mod gui;  // Complex GUI with full integration - disabled due to circular dependencies
+pub mod gui_simple;  // Simplified GUI backend for dashboards
 pub mod health;
 pub mod metrics;
 pub mod multiregion;
