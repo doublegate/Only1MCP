@@ -46,7 +46,7 @@ fn test_daemon_start_and_stop() {
 
     // Start daemon
     let start_output = Command::new(&binary)
-        .args(&["start"])
+        .args(["start"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -67,7 +67,7 @@ fn test_daemon_start_and_stop() {
     assert!(pid_path.exists(), "PID file should exist after start");
 
     // Check process is running
-    let pid = fs::read_to_string(&pid_path)
+    let pid = fs::read_to_string(pid_path)
         .expect("Should be able to read PID file")
         .trim()
         .parse::<u32>()
@@ -77,7 +77,7 @@ fn test_daemon_start_and_stop() {
 
     // Stop daemon
     let stop_output = Command::new(&binary)
-        .args(&["stop"])
+        .args(["stop"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -107,7 +107,7 @@ fn test_foreground_mode() {
 
     // Start in foreground mode with timeout
     let mut child = Command::new(&binary)
-        .args(&["start", "--foreground"])
+        .args(["start", "--foreground"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -143,7 +143,7 @@ fn test_duplicate_instance_prevention() {
 
     // Start first instance
     let start1_output = Command::new(&binary)
-        .args(&["start"])
+        .args(["start"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -156,7 +156,7 @@ fn test_duplicate_instance_prevention() {
 
     // Try to start second instance
     let start2_output = Command::new(&binary)
-        .args(&["start"])
+        .args(["start"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -186,13 +186,13 @@ fn test_stale_pid_file_handling() {
 
     // Create stale PID file with non-existent PID
     let stale_pid = 99999u32;
-    fs::write(&pid_path, stale_pid.to_string()).expect("Failed to write stale PID file");
+    fs::write(pid_path, stale_pid.to_string()).expect("Failed to write stale PID file");
 
     let binary = get_binary_path();
 
     // Start should detect stale PID and proceed
     let start_output = Command::new(&binary)
-        .args(&["start"])
+        .args(["start"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -209,7 +209,7 @@ fn test_stale_pid_file_handling() {
     thread::sleep(Duration::from_secs(2));
 
     // Verify new PID is different
-    let new_pid = fs::read_to_string(&pid_path)
+    let new_pid = fs::read_to_string(pid_path)
         .expect("Should be able to read PID file")
         .trim()
         .parse::<u32>()
@@ -230,7 +230,7 @@ fn test_graceful_shutdown_signal() {
 
     // Start daemon
     let start_output = Command::new(&binary)
-        .args(&["start"])
+        .args(["start"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -244,7 +244,7 @@ fn test_graceful_shutdown_signal() {
     // Get PID
     let daemon_mgr = DaemonManager::new().unwrap();
     let pid_path = daemon_mgr.get_pid_path();
-    let pid = fs::read_to_string(&pid_path)
+    let pid = fs::read_to_string(pid_path)
         .expect("Should be able to read PID file")
         .trim()
         .parse::<u32>()

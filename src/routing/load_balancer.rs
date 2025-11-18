@@ -24,8 +24,10 @@ use xxhash_rust::xxh3::Xxh3;
 /// Routing algorithm selection
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum RoutingAlgorithm {
     /// Round-robin distribution
+    #[default]
     RoundRobin,
     /// Least connections using Power of Two Choices
     LeastConnections,
@@ -37,11 +39,6 @@ pub enum RoutingAlgorithm {
     ConsistentHash,
 }
 
-impl Default for RoutingAlgorithm {
-    fn default() -> Self {
-        Self::RoundRobin
-    }
-}
 
 /// Routing configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
