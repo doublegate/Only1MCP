@@ -494,6 +494,17 @@ impl Metrics {
             metric_name: "resources_list",
         }
     }
+
+    /// Export metrics in Prometheus format
+    pub fn export(&self) -> String {
+        match self.exporter.export() {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+            Err(e) => {
+                tracing::error!("Failed to export metrics: {}", e);
+                format!("# Error exporting metrics: {}", e)
+            }
+        }
+    }
 }
 
 impl Default for Metrics {

@@ -3,6 +3,8 @@
 //! Core functionality for the MCP server aggregator.
 //! This library can be embedded in other applications.
 
+pub mod admin;
+pub mod audit;
 pub mod auth;
 pub mod batching;
 pub mod cache;
@@ -12,6 +14,7 @@ pub mod error;
 pub mod health;
 pub mod metrics;
 pub mod proxy;
+pub mod ratelimit;
 pub mod routing;
 pub mod transport;
 pub mod tui;
