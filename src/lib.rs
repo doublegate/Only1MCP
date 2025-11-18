@@ -16,6 +16,7 @@ pub mod metrics;
 pub mod proxy;
 pub mod ratelimit;
 pub mod routing;
+pub mod security;
 pub mod transport;
 pub mod tui;
 pub mod types;

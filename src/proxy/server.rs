@@ -386,6 +386,10 @@ impl ProxyServer {
             .with_state(app_state)
             // Apply middleware in reverse order (innermost first)
             .layer(TraceLayer::new_for_http())
+            // Security hardening
+            .layer(axum::middleware::from_fn(
+                crate::security::security_headers_middleware,
+            ))
             // Note: TimeoutLayer commented out due to type incompatibility with Axum 0.7
             // Individual handlers should implement their own timeouts
             // .layer(tower::timeout::TimeoutLayer::new(Duration::from_secs(30)))
