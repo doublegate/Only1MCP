@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'only1mcp-dev'
+    environment: 'docker-compose'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alerts/*.yml"
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Only1MCP metrics
+  - job_name: 'only1mcp'
+    static_configs:
+      - targets: ['only1mcp:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Scrape example MCP servers (if they expose metrics)
+  - job_name: 'mcp-servers'
+    static_configs:
+      - targets:
+          - 'mcp-filesystem:9090'
+          - 'mcp-github:9090'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Scrape Redis exporter (if added)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    # Uncomment if you add redis-exporter to docker-compose
+
+  # Scrape Node exporter (for system metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    # Uncomment if you add node-exporter to docker-compose
