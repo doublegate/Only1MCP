@@ -1,6 +1,6 @@
 [package]
 name = "only1mcp"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Only1MCP Team"]
 description = "The Ultimate MCP Server Aggregator - A unified proxy for Model Context Protocol servers"

@@ -2,16 +2,40 @@
 
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)]()
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-127%2F127%20passing-brightgreen.svg)]()
-[![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
-[![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-112%2F112%20passing-brightgreen.svg)]()
+[![Production Ready](https://img.shields.io/badge/production-ready-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)]()
 
-> **Status**: 🎉 **All 4 MCP Servers Operational!** STDIO, SSE, and Streamable HTTP transports working - 14 tools available across Context7, Sequential Thinking, Memory, and NWS Weather servers. Phase 2 Complete with all 6 features - 100% test pass rate (127/127)
+> **Status**: 🚀 **Production Ready v0.6.0!** Complete with production infrastructure (K8s, Docker, Terraform), 5 example plugins, comprehensive docs, and enterprise features. Deploy-ready with multi-cloud support. 112/112 tests passing.
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
+
+## 🆕 What's New in v0.6.0
+
+### Production Infrastructure
+- **🐳 Docker Compose** - Complete local dev stack with Prometheus, Grafana, Redis, example MCP servers
+- **☸️ Kubernetes** - Production manifests with HPA, PDB, Ingress, TLS, and Prometheus integration
+- **☁️ Terraform AWS** - Full ECS Fargate deployment with VPC, ALB, Redis, RDS, and CloudWatch
+- **📚 11,800+ lines** of deployment documentation and guides
+
+### Plugin Ecosystem (5 Production-Ready Plugins)
+- **🚦 Rate Limiter** - Per-client rate limiting with sliding window
+- **🔐 OAuth Provider** - OAuth2 authentication with token management
+- **📊 Metrics Collector** - Custom metrics with percentile calculations
+- **🔄 Protocol Adapter** - Multi-protocol conversion (REST/GraphQL/gRPC ↔ MCP)
+- **⚖️ Custom Load Balancer** - Advanced routing with adaptive learning
+
+### Enhanced Developer Experience
+- Interactive web dashboard with real-time metrics
+- 3 configuration templates (solo, team, enterprise)
+- Comprehensive integration guides for JavaScript, Python, and Rust
+- Performance tuning guide with Prometheus/Grafana setup
+- Demo applications and benchmark suites
+
+**→ [See Full Changelog](CHANGELOG.md) | [Deployment Guide](deploy/README.md) | [Examples](examples/README.md)**
 
 ---
 

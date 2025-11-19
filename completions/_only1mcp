@@ -1,0 +1,118 @@
+#compdef only1mcp
+
+# Zsh completion for only1mcp
+# Installation: Copy to a directory in your $fpath (e.g., /usr/local/share/zsh/site-functions/)
+
+_only1mcp() {
+    local -a commands
+    commands=(
+        'start:Start the proxy server'
+        'stop:Stop the running proxy server'
+        'restart:Restart the proxy server'
+        'status:Show server status'
+        'validate:Validate configuration file'
+        'config:Configuration management'
+        'help:Show help information'
+    )
+
+    local -a config_commands
+    config_commands=(
+        'generate:Generate configuration from template'
+        'validate:Validate configuration file'
+        'show:Display current configuration'
+        'edit:Edit configuration file'
+    )
+
+    local -a templates
+    templates=(
+        'solo:Solo developer configuration'
+        'team:Small team configuration'
+        'enterprise:Enterprise multi-region configuration'
+        'custom:Custom configuration template'
+    )
+
+    local -a log_levels
+    log_levels=(
+        'trace:Very verbose logging'
+        'debug:Debug level logging'
+        'info:Informational logging'
+        'warn:Warning level logging'
+        'error:Error level logging'
+    )
+
+    _arguments -C \
+        '1: :->command' \
+        '*:: :->args' \
+        && return 0
+
+    case $state in
+        command)
+            _describe -t commands 'only1mcp commands' commands
+            ;;
+        args)
+            case $words[1] in
+                start)
+                    _arguments \
+                        '--host[Host to bind to]:host:(127.0.0.1 0.0.0.0 localhost)' \
+                        '--port[Port to bind to]:port:(8080 3000 4000 5000)' \
+                        '--config[Configuration file]:file:_files -g "*.{yaml,yml,toml}"' \
+                        '--daemon[Run as daemon]' \
+                        '--foreground[Run in foreground]' \
+                        '--workers[Number of worker threads]:workers:(1 2 4 8 16)' \
+                        '--log-level[Logging level]:level:->log_level' \
+                        '--log-file[Log file path]:file:_files' \
+                        '--help[Show help]'
+                    ;;
+                config)
+                    _arguments \
+                        '1: :->config_command' \
+                        '*:: :->config_args'
+
+                    case $state in
+                        config_command)
+                            _describe -t config_commands 'config commands' config_commands
+                            ;;
+                        config_args)
+                            case $words[1] in
+                                generate)
+                                    _arguments \
+                                        '--template[Template to use]:template:->template' \
+                                        '--output[Output file]:file:_files'
+                                    ;;
+                                validate|show|edit)
+                                    _arguments \
+                                        '1:configuration file:_files -g "*.{yaml,yml,toml}"'
+                                    ;;
+                            esac
+                            ;;
+                    esac
+                    ;;
+                validate)
+                    _arguments \
+                        '1:configuration file:_files -g "*.{yaml,yml,toml}"'
+                    ;;
+                *)
+                    _arguments \
+                        '--config[Configuration file]:file:_files -g "*.{yaml,yml,toml}"' \
+                        '--help[Show help]' \
+                        '--version[Show version]' \
+                        '--verbose[Verbose output]' \
+                        '--quiet[Quiet mode]'
+                    ;;
+            esac
+            ;;
+    esac
+
+    case $state in
+        template)
+            _describe -t templates 'configuration templates' templates
+            ;;
+        log_level)
+            _describe -t log_levels 'log levels' log_levels
+            ;;
+    esac
+
+    return 0
+}
+
+_only1mcp "$@"
