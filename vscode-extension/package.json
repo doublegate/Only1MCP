@@ -1,0 +1,123 @@
+{
+  "name": "only1mcp-config",
+  "displayName": "Only1MCP Configuration",
+  "description": "Syntax highlighting, validation, and IntelliSense for Only1MCP configuration files",
+  "version": "0.6.0",
+  "publisher": "only1mcp",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doublegate/Only1MCP"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "keywords": [
+    "mcp",
+    "only1mcp",
+    "proxy",
+    "configuration",
+    "yaml"
+  ],
+  "activationEvents": [
+    "onLanguage:yaml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "only1mcp-config",
+        "aliases": [
+          "Only1MCP Configuration",
+          "only1mcp"
+        ],
+        "extensions": [
+          ".only1mcp.yaml",
+          ".only1mcp.yml",
+          "only1mcp.yaml",
+          "only1mcp.yml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "only1mcp-config",
+        "scopeName": "source.yaml.only1mcp",
+        "path": "./syntaxes/only1mcp.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "only1mcp-config",
+        "path": "./snippets/only1mcp.json"
+      },
+      {
+        "language": "yaml",
+        "path": "./snippets/only1mcp.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[only1mcp-config]": {
+        "editor.insertSpaces": true,
+        "editor.tabSize": 2,
+        "editor.quickSuggestions": {
+          "other": true,
+          "comments": false,
+          "strings": true
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "only1mcp.validateConfig",
+        "title": "Validate Only1MCP Configuration",
+        "category": "Only1MCP"
+      },
+      {
+        "command": "only1mcp.generateConfig",
+        "title": "Generate Only1MCP Configuration",
+        "category": "Only1MCP"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "resourceExtname == .yaml || resourceExtname == .yml",
+          "command": "only1mcp.validateConfig",
+          "group": "only1mcp"
+        }
+      ]
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "**/*only1mcp*.{yaml,yml}",
+        "url": "./schemas/only1mcp-schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^2.19.0"
+  },
+  "dependencies": {
+    "yaml": "^2.3.0"
+  }
+}

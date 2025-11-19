@@ -1,0 +1,176 @@
+{
+  "Only1MCP Basic Configuration": {
+    "prefix": "only1mcp-basic",
+    "body": [
+      "# Only1MCP Configuration",
+      "host: \"${1:0.0.0.0}\"",
+      "port: ${2:8080}",
+      "",
+      "mcp_servers:",
+      "  - name: \"${3:my-server}\"",
+      "    transport:",
+      "      http:",
+      "        url: \"${4:http://localhost:3000}\"",
+      "    enabled: true",
+      "",
+      "load_balancing:",
+      "  algorithm: ${5|round_robin,least_connections,consistent_hash,random|}",
+      "",
+      "logging:",
+      "  level: \"${6|error,warn,info,debug,trace|}\"",
+      "  json: false"
+    ],
+    "description": "Basic Only1MCP configuration"
+  },
+  "HTTP Transport": {
+    "prefix": "only1mcp-http",
+    "body": [
+      "- name: \"${1:server-name}\"",
+      "  transport:",
+      "    http:",
+      "      url: \"${2:http://localhost:3000}\"",
+      "  enabled: true",
+      "  ${3:weight: 100}"
+    ],
+    "description": "HTTP transport configuration"
+  },
+  "STDIO Transport": {
+    "prefix": "only1mcp-stdio",
+    "body": [
+      "- name: \"${1:server-name}\"",
+      "  transport:",
+      "    stdio:",
+      "      command: \"${2:npx}\"",
+      "      args: [\"${3:-y}\", \"${4:@modelcontextprotocol/server-filesystem}\", \"${5:/path}\"]",
+      "  enabled: true"
+    ],
+    "description": "STDIO transport configuration"
+  },
+  "SSE Transport": {
+    "prefix": "only1mcp-sse",
+    "body": [
+      "- name: \"${1:server-name}\"",
+      "  transport:",
+      "    sse:",
+      "      url: \"${2:https://example.com/mcp}\"",
+      "  enabled: true"
+    ],
+    "description": "SSE transport configuration"
+  },
+  "WebSocket Transport": {
+    "prefix": "only1mcp-ws",
+    "body": [
+      "- name: \"${1:server-name}\"",
+      "  transport:",
+      "    websocket:",
+      "      url: \"${2:ws://localhost:8080}\"",
+      "  enabled: true"
+    ],
+    "description": "WebSocket transport configuration"
+  },
+  "Load Balancing Config": {
+    "prefix": "only1mcp-lb",
+    "body": [
+      "load_balancing:",
+      "  algorithm: ${1|round_robin,least_connections,consistent_hash,random|}",
+      "  health_check:",
+      "    interval_secs: ${2:30}",
+      "    timeout_ms: ${3:5000}",
+      "    unhealthy_threshold: ${4:3}",
+      "    healthy_threshold: ${5:2}"
+    ],
+    "description": "Load balancing configuration"
+  },
+  "Cache Configuration": {
+    "prefix": "only1mcp-cache",
+    "body": [
+      "cache:",
+      "  enabled: ${1:true}",
+      "  max_size_mb: ${2:100}",
+      "  ttl_secs: ${3:300}"
+    ],
+    "description": "Response caching configuration"
+  },
+  "Rate Limiting": {
+    "prefix": "only1mcp-ratelimit",
+    "body": [
+      "rate_limiting:",
+      "  enabled: ${1:true}",
+      "  requests_per_minute: ${2:60}",
+      "  burst_size: ${3:10}"
+    ],
+    "description": "Rate limiting configuration"
+  },
+  "JWT Authentication": {
+    "prefix": "only1mcp-jwt",
+    "body": [
+      "auth:",
+      "  jwt:",
+      "    secret: \"${1:your-secret-key}\"",
+      "    algorithm: \"${2|HS256,HS384,HS512,RS256,RS384,RS512|}\"",
+      "    expiry_secs: ${3:3600}"
+    ],
+    "description": "JWT authentication configuration"
+  },
+  "OAuth2 Configuration": {
+    "prefix": "only1mcp-oauth",
+    "body": [
+      "auth:",
+      "  oauth:",
+      "    client_id: \"${1:your-client-id}\"",
+      "    client_secret: \"${2:your-client-secret}\"",
+      "    auth_url: \"${3:https://provider.com/oauth/authorize}\"",
+      "    token_url: \"${4:https://provider.com/oauth/token}\""
+    ],
+    "description": "OAuth2 authentication configuration"
+  },
+  "Admin API": {
+    "prefix": "only1mcp-admin",
+    "body": [
+      "admin:",
+      "  enabled: ${1:true}",
+      "  port: ${2:8081}",
+      "  auth:",
+      "    jwt:",
+      "      secret: \"${3:admin-secret}\""
+    ],
+    "description": "Admin API configuration"
+  },
+  "Metrics Configuration": {
+    "prefix": "only1mcp-metrics",
+    "body": [
+      "metrics:",
+      "  enabled: ${1:true}",
+      "  port: ${2:9090}",
+      "  path: \"${3:/metrics}\""
+    ],
+    "description": "Prometheus metrics configuration"
+  },
+  "Multi-Tenancy": {
+    "prefix": "only1mcp-tenant",
+    "body": [
+      "tenancy:",
+      "  enabled: true",
+      "  tenants:",
+      "    - id: \"${1:tenant-1}\"",
+      "      name: \"${2:Tenant 1}\"",
+      "      tier: ${3|free,pro,enterprise|}",
+      "      rate_limit:",
+      "        requests_per_minute: ${4:60}"
+    ],
+    "description": "Multi-tenancy configuration"
+  },
+  "Logging Configuration": {
+    "prefix": "only1mcp-logging",
+    "body": [
+      "logging:",
+      "  level: \"${1|error,warn,info,debug,trace|}\"",
+      "  file: \"${2:/var/log/only1mcp/server.log}\"",
+      "  json: ${3:false}",
+      "  rotation:",
+      "    max_size_mb: ${4:100}",
+      "    max_files: ${5:10}"
+    ],
+    "description": "Logging configuration"
+  }
+}
