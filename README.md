@@ -2,18 +2,75 @@
 
 **High-Performance MCP Server Aggregator & Intelligent Proxy**
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)]()
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Tests](https://img.shields.io/badge/tests-112%2F112%20passing-brightgreen.svg)]()
 [![Production Ready](https://img.shields.io/badge/production-ready-brightgreen.svg)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)]()
 
-> **Status**: 🚀 **Production Ready v0.6.0!** Complete with production infrastructure (K8s, Docker, Terraform), 5 example plugins, comprehensive docs, and enterprise features. Deploy-ready with multi-cloud support. 112/112 tests passing.
+> **Status**: 🚀 **Production Ready v0.7.0!** Now with Plugin Marketplace, Tauri Desktop App, Multi-Cloud Support (GCP/Azure/DO), Istio Service Mesh, and Multi-Cluster Routing. Enterprise-grade features with native UI. 3,500+ lines of new code across 18 files.
 
 Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for Model Context Protocol (MCP) servers. It provides a unified interface for AI applications to interact with multiple MCP tool servers while dramatically reducing context overhead (50-70% reduction) and improving performance (<5ms latency, 10k+ req/s throughput).
 
-## 🆕 What's New in v0.6.0
+## 🆕 What's New in v0.7.0
+
+### Plugin Marketplace & Community Ecosystem
+- **🏪 Plugin Registry API** - Complete marketplace with PostgreSQL, S3/GCS storage, security validation
+- **📦 Plugin CLI** - Full management: `install`, `publish`, `search`, `init`, `list`, `info`, `test`, `uninstall`
+- **🔐 Security Validation** - SHA-256 checksums, semver enforcement, SPDX licenses, malware scanning
+- **⭐ Rating & Reviews** - Community-driven plugin ratings with aggregated scores
+- **🔍 Full-Text Search** - PostgreSQL GIN indexes for fast plugin discovery
+- **📄 Database Schema** - Complete migrations for plugins, versions, and ratings tables
+
+### Native Desktop Application (Tauri 1.5)
+- **🖥️ Cross-Platform App** - Native UI for macOS, Windows, and Linux
+- **📊 Real-Time Dashboard** - Live metrics with Recharts line charts (RPS, latency, connections)
+- **🎮 One-Click Controls** - Start/stop proxy with system tray integration
+- **⚡ WebSocket Streaming** - Metrics updates every 1 second
+- **🎨 Modern UI** - React + TypeScript + TailwindCSS
+- **🛠️ 8 Backend Commands** - Complete Rust-based API (status, start, stop, config, metrics)
+
+### Multi-Cloud Deployment (Complete IaC)
+- **☁️ Google Cloud Platform** - Complete Terraform modules:
+  - GKE cluster with autoscaling (2-10 nodes)
+  - Cloud SQL PostgreSQL for marketplace
+  - Memorystore Redis for caching
+  - Cloud Storage for plugin binaries
+  - VPC networking with service accounts
+- **💠 Microsoft Azure** - Bicep Infrastructure as Code:
+  - Container Registry for Docker images
+  - Container Instances for serverless deployment
+  - Resource group management
+- **🌊 DigitalOcean** - Production Kubernetes:
+  - HorizontalPodAutoscaler (3-10 pods)
+  - LoadBalancer service configuration
+  - PodDisruptionBudget for high availability
+
+### Enterprise Service Mesh (Istio)
+- **🕸️ Complete Istio Config** - Gateway, VirtualService, DestinationRule
+- **🔒 Strict mTLS** - All traffic encrypted with peer authentication
+- **🎯 Canary Deployments** - 90/10 traffic split for safe rollouts
+- **🔄 Circuit Breaking** - Connection pooling, outlier detection, automatic ejection
+- **🎫 JWT Authentication** - Request-level validation with JWKS
+- **📡 Telemetry** - Jaeger tracing (100% sampling) + Prometheus metrics
+- **🌐 External Services** - ServiceEntry for external MCP servers
+
+### Multi-Cluster Routing System
+- **🌍 Geographic Routing** - Route to nearest cluster by region
+- **⚖️ Load-Based Routing** - Select cluster with most available capacity
+- **💰 Cost Optimization** - Route based on regional pricing
+- **🎚️ Weighted Distribution** - Custom traffic split percentages
+- **🔁 Primary-Secondary Failover** - Automatic failover chains
+- **📈 Health Tracking** - Per-cluster request/latency/error metrics
+- **⚠️ Auto-Degradation** - Mark clusters unhealthy on failure thresholds
+- **🔍 Cluster Capacity** - Monitor nodes, CPU, memory availability
+
+**→ [See Full Changelog](CHANGELOG.md) | [v0.7.0 Implementation Guide](docs/OPTIONS_A_TO_E_IMPLEMENTATION.md) | [Marketplace Docs](marketplace/README.md) | [Desktop App](tauri-app/README.md)**
+
+---
+
+## 📚 v0.6.0 Highlights
 
 ### Production Infrastructure
 - **🐳 Docker Compose** - Complete local dev stack with Prometheus, Grafana, Redis, example MCP servers
