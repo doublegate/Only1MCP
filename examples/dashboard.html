@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Only1MCP Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stat:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            color: #333;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .status-running {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-stopped {
+            background: #ef4444;
+            color: white;
+        }
+
+        .status-healthy {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-unhealthy {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .server-list {
+            margin-top: 15px;
+        }
+
+        .server-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .server-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .server-transport {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .chart-container {
+            height: 200px;
+            margin-top: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-around;
+        }
+
+        .chart-bar {
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            border-radius: 4px 4px 0 0;
+            width: 20px;
+            transition: height 0.3s ease;
+        }
+
+        .events-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            padding: 12px;
+            background: #f9fafb;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .event-item.warning {
+            border-left-color: #f59e0b;
+        }
+
+        .event-item.error {
+            border-left-color: #ef4444;
+        }
+
+        .event-time {
+            color: #666;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .event-message {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Only1MCP Dashboard</h1>
+            <p>Real-time monitoring and control for your MCP server aggregator</p>
+        </header>
+
+        <div id="error-container"></div>
+
+        <div class="dashboard-grid">
+            <!-- Status Card -->
+            <div class="card">
+                <h2>System Status</h2>
+                <div class="stat">
+                    <span class="stat-label">Proxy Status</span>
+                    <span class="stat-value" id="proxy-status">
+                        <span class="status-badge status-stopped">LOADING...</span>
+                    </span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value" id="uptime">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Active Connections</span>
+                    <span class="stat-value" id="connections">-</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Version</span>
+                    <span class="stat-value" id="version">-</span>
+                </div>
+                <div class="controls">
+                    <button class="btn-primary" onclick="startProxy()">Start</button>
+                    <button class="btn-danger" onclick="stopProxy()">Stop</button>
+                    <button class="btn-secondary" onclick="refreshDashboard()">Refresh</button>
+                </div>
+            </div>
+
+            <!-- Servers Card -->
+            <div class="card">
+                <h2>MCP Servers</h2>
+                <div class="stat">
+                    <span class="stat-label">Total Servers</span>
+                    <span class="stat-value" id="total-servers">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Healthy Servers</span>
+                    <span class="stat-value" id="healthy-servers">0</span>
+                </div>
+                <div class="server-list" id="server-list">
+                    <div class="loading pulse">No servers configured</div>
+                </div>
+            </div>
+
+            <!-- Metrics Card -->
+            <div class="card">
+                <h2>Performance Metrics</h2>
+                <div class="stat">
+                    <span class="stat-label">Total Metrics</span>
+                    <span class="stat-value" id="total-metrics">0</span>
+                </div>
+                <div class="chart-container" id="metrics-chart">
+                    <!-- Dynamic bars will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Events Card (Full Width) -->
+        <div class="card">
+            <h2>System Events</h2>
+            <div class="events-list" id="events-list">
+                <div class="loading pulse">Loading events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL - adjust this to your backend
+        const API_BASE = 'http://localhost:8080';
+
+        // Dashboard data
+        let dashboardData = null;
+        let serversData = null;
+        let eventsData = null;
+
+        // Format uptime in human-readable format
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorContainer = document.getElementById('error-container');
+            errorContainer.innerHTML = `
+                <div class="error-message">
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+
+        // Clear error message
+        function clearError() {
+            document.getElementById('error-container').innerHTML = '';
+        }
+
+        // Fetch dashboard data
+        async function fetchDashboard() {
+            try {
+                // For demo purposes, use mock data
+                // In production, replace with: const response = await fetch(`${API_BASE}/api/gui/dashboard`);
+                dashboardData = {
+                    is_running: true,
+                    uptime_seconds: 3600,
+                    active_connections: 42,
+                    total_servers: 3,
+                    healthy_servers: 3,
+                    version: "0.4.0"
+                };
+
+                updateDashboardUI();
+                clearError();
+            } catch (error) {
+                showError(`Failed to fetch dashboard: ${error.message}`);
+                console.error('Dashboard fetch error:', error);
+            }
+        }
+
+        // Fetch servers
+        async function fetchServers() {
+            try {
+                // Mock data - replace with API call in production
+                serversData = [
+                    { id: "mcp-1", name: "Primary MCP Server", transport_type: "stdio", healthy: true, enabled: true },
+                    { id: "mcp-2", name: "Backup MCP Server", transport_type: "http", healthy: true, enabled: true },
+                    { id: "mcp-3", name: "Cloud MCP Server", transport_type: "sse", healthy: true, enabled: true }
+                ];
+
+                updateServersUI();
+            } catch (error) {
+                console.error('Servers fetch error:', error);
+            }
+        }
+
+        // Fetch events
+        async function fetchEvents() {
+            try {
+                // Mock data - replace with API call in production
+                eventsData = [
+                    { timestamp: new Date().toISOString(), event_type: "proxy_started", message: "Proxy started successfully", severity: "Info" },
+                    { timestamp: new Date(Date.now() - 60000).toISOString(), event_type: "server_added", message: "Added MCP server 'mcp-1'", severity: "Info" },
+                    { timestamp: new Date(Date.now() - 120000).toISOString(), event_type: "config_loaded", message: "Configuration loaded from only1mcp.yaml", severity: "Info" },
+                ];
+
+                updateEventsUI();
+            } catch (error) {
+                console.error('Events fetch error:', error);
+            }
+        }
+
+        // Update dashboard UI
+        function updateDashboardUI() {
+            if (!dashboardData) return;
+
+            const statusBadge = dashboardData.is_running
+                ? '<span class="status-badge status-running">RUNNING</span>'
+                : '<span class="status-badge status-stopped">STOPPED</span>';
+
+            document.getElementById('proxy-status').innerHTML = statusBadge;
+            document.getElementById('uptime').textContent = formatUptime(dashboardData.uptime_seconds);
+            document.getElementById('connections').textContent = dashboardData.active_connections;
+            document.getElementById('version').textContent = dashboardData.version;
+            document.getElementById('total-servers').textContent = dashboardData.total_servers;
+            document.getElementById('healthy-servers').textContent = dashboardData.healthy_servers;
+        }
+
+        // Update servers UI
+        function updateServersUI() {
+            if (!serversData || serversData.length === 0) return;
+
+            const serverList = document.getElementById('server-list');
+            serverList.innerHTML = serversData.map(server => `
+                <div class="server-item">
+                    <div>
+                        <div class="server-name">${server.name}</div>
+                        <div class="server-transport">${server.transport_type}</div>
+                    </div>
+                    <span class="status-badge ${server.healthy ? 'status-healthy' : 'status-unhealthy'}">
+                        ${server.healthy ? 'HEALTHY' : 'UNHEALTHY'}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        // Update events UI
+        function updateEventsUI() {
+            if (!eventsData || eventsData.length === 0) return;
+
+            const eventsList = document.getElementById('events-list');
+            eventsList.innerHTML = eventsData.map(event => {
+                const date = new Date(event.timestamp);
+                const cssClass = event.severity.toLowerCase();
+                return `
+                    <div class="event-item ${cssClass}">
+                        <div class="event-time">${date.toLocaleString()}</div>
+                        <div class="event-message">${event.message}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update metrics chart
+        function updateMetricsChart() {
+            const chart = document.getElementById('metrics-chart');
+            const bars = Array.from({length: 20}, () => Math.random() * 100);
+
+            chart.innerHTML = bars.map(height =>
+                `<div class="chart-bar" style="height: ${height}%;"></div>`
+            ).join('');
+
+            document.getElementById('total-metrics').textContent = '5';
+        }
+
+        // Control functions
+        async function startProxy() {
+            try {
+                // In production: await fetch(`${API_BASE}/api/gui/control`, { method: 'POST', body: JSON.stringify({ Start: null }) });
+                dashboardData.is_running = true;
+                updateDashboardUI();
+                showError('Demo mode: Proxy start simulated (connect to real backend for actual control)');
+            } catch (error) {
+                showError(`Failed to start proxy: ${error.message}`);
+            }
+        }
+
+        async function stopProxy() {
+            try {
+                // In production: await fetch(`${API_BASE}/api/gui/control`, { method: 'POST', body: JSON.stringify({ Stop: null }) });
+                dashboardData.is_running = false;
+                updateDashboardUI();
+                showError('Demo mode: Proxy stop simulated (connect to real backend for actual control)');
+            } catch (error) {
+                showError(`Failed to stop proxy: ${error.message}`);
+            }
+        }
+
+        async function refreshDashboard() {
+            clearError();
+            await Promise.all([
+                fetchDashboard(),
+                fetchServers(),
+                fetchEvents()
+            ]);
+            updateMetricsChart();
+        }
+
+        // Initialize dashboard
+        async function initDashboard() {
+            await refreshDashboard();
+
+            // Auto-refresh every 5 seconds
+            setInterval(() => {
+                fetchDashboard();
+                updateMetricsChart();
+            }, 5000);
+
+            // Update uptime every second
+            setInterval(() => {
+                if (dashboardData && dashboardData.is_running) {
+                    dashboardData.uptime_seconds++;
+                    document.getElementById('uptime').textContent = formatUptime(dashboardData.uptime_seconds);
+                }
+            }, 1000);
+        }
+
+        // Start the dashboard
+        initDashboard();
+    </script>
+</body>
+</html>

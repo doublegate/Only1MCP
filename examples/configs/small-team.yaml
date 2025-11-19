@@ -1,0 +1,123 @@
+# Small Team Configuration (5-20 developers)
+# Includes authentication, rate limiting, and multi-server setup
+
+host: "0.0.0.0"  # Listen on all interfaces
+port: 8080
+
+log_level: "info"
+log_format: "json"  # Structured logging for teams
+
+# MCP Backend Servers
+servers:
+  # Primary filesystem server
+  filesystem-primary:
+    name: "Primary Filesystem Server"
+    transport:
+      stdio:
+        command: "/usr/local/bin/mcp-filesystem"
+        args: ["/shared/team-projects"]
+    enabled: true
+    priority: 100
+    weight: 2
+
+  # Backup filesystem server
+  filesystem-backup:
+    name: "Backup Filesystem Server"
+    transport:
+      stdio:
+        command: "/usr/local/bin/mcp-filesystem"
+        args: ["/backup/team-projects"]
+    enabled: true
+    priority: 90
+    weight: 1
+
+  # Shared GitHub server
+  github:
+    name: "Team GitHub Server"
+    transport:
+      http:
+        url: "http://mcp-github-service:3000"
+        timeout_ms: 5000
+    enabled: true
+    priority: 95
+    weight: 1
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 30
+
+  # Documentation server
+  docs:
+    name: "Team Docs Server"
+    transport:
+      sse:
+        url: "http://mcp-docs-service:3001/sse"
+    enabled: true
+    priority: 85
+    weight: 1
+
+# Load balancing with consistent hashing for session affinity
+load_balancing:
+  strategy: "consistent_hash"
+  health_check_interval: 15
+  failure_threshold: 3
+  recovery_threshold: 2
+
+# Response caching
+cache:
+  enabled: true
+  ttl: 600  # 10 minutes
+  max_size: 1000
+
+# Request batching
+batching:
+  enabled: true
+  window_ms: 50
+  max_batch_size: 20
+
+# Rate limiting per user
+rate_limiting:
+  enabled: true
+  requests_per_minute: 60
+  burst_size: 100
+
+# JWT Authentication
+authentication:
+  enabled: true
+  jwt:
+    secret: "${JWT_SECRET}"  # Set in environment
+    algorithm: "HS256"
+    token_expiry_hours: 24
+    refresh_enabled: true
+
+# Multi-tenancy (basic tier for all team members)
+multi_tenancy:
+  enabled: true
+  default_tier: "pro"
+
+# TLS for team deployment
+tls:
+  enabled: true
+  cert_file: "/etc/only1mcp/certs/server.crt"
+  key_file: "/etc/only1mcp/certs/server.key"
+
+# Audit logging
+audit:
+  enabled: true
+  log_file: "/var/log/only1mcp/audit.log"
+  events: ["auth", "admin", "config_change"]
+
+# Metrics with Prometheus
+metrics:
+  enabled: true
+  prometheus_port: 9090
+  collection_interval: 10
+
+# Admin API
+admin_api:
+  enabled: true
+  port: 8081
+  auth_required: true
+
+# Hot reload disabled in team environment
+hot_reload: false

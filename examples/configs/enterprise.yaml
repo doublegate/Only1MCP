@@ -1,0 +1,252 @@
+# Enterprise Configuration
+# Full-featured setup with multi-region, AI optimization, and advanced security
+
+host: "0.0.0.0"
+port: 8080
+
+log_level: "warn"  # Reduce noise in production
+log_format: "json"
+
+# MCP Backend Servers (Multiple instances per region)
+servers:
+  # US East Region
+  mcp-us-east-1:
+    name: "US East Primary"
+    transport:
+      http:
+        url: "https://mcp-us-east-1.internal:3000"
+        timeout_ms: 3000
+    enabled: true
+    priority: 100
+    weight: 3
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 10
+
+  mcp-us-east-2:
+    name: "US East Secondary"
+    transport:
+      http:
+        url: "https://mcp-us-east-2.internal:3000"
+        timeout_ms: 3000
+    enabled: true
+    priority: 99
+    weight: 2
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 10
+
+  # US West Region
+  mcp-us-west-1:
+    name: "US West Primary"
+    transport:
+      http:
+        url: "https://mcp-us-west-1.internal:3000"
+        timeout_ms: 3000
+    enabled: true
+    priority: 100
+    weight: 3
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 10
+
+  # EU Region
+  mcp-eu-central-1:
+    name: "EU Central Primary"
+    transport:
+      http:
+        url: "https://mcp-eu-central-1.internal:3000"
+        timeout_ms: 3000
+    enabled: true
+    priority: 100
+    weight: 3
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 10
+
+  # Asia Pacific Region
+  mcp-ap-southeast-1:
+    name: "Asia Pacific Primary"
+    transport:
+      http:
+        url: "https://mcp-ap-southeast-1.internal:3000"
+        timeout_ms: 3000
+    enabled: true
+    priority: 100
+    weight: 3
+    health_check:
+      enabled: true
+      path: "/health"
+      interval_secs: 10
+
+# Advanced load balancing
+load_balancing:
+  strategy: "weighted_least_connections"
+  health_check_interval: 5
+  failure_threshold: 2
+  recovery_threshold: 3
+  circuit_breaker:
+    enabled: true
+    error_threshold_percentage: 50
+    min_requests: 10
+    timeout_duration_secs: 30
+
+# Aggressive caching
+cache:
+  enabled: true
+  ttl: 3600  # 1 hour
+  max_size: 10000
+  compression: "zstd"
+
+# Request batching
+batching:
+  enabled: true
+  window_ms: 25  # Lower latency
+  max_batch_size: 50
+
+# Strict rate limiting with tiers
+rate_limiting:
+  enabled: true
+  requests_per_minute: 1000
+  burst_size: 1500
+
+# JWT Authentication with rotation
+authentication:
+  enabled: true
+  jwt:
+    secret: "${JWT_SECRET}"
+    algorithm: "RS256"  # RSA for enterprise
+    token_expiry_hours: 8
+    refresh_enabled: true
+    refresh_expiry_hours: 168  # 7 days
+
+# Multi-tenancy with all tiers
+multi_tenancy:
+  enabled: true
+  tiers:
+    free:
+      rate_limit: 60  # RPM
+      max_servers: 2
+    pro:
+      rate_limit: 300
+      max_servers: 10
+    enterprise:
+      rate_limit: 1000
+      max_servers: unlimited
+
+# TLS with strong ciphers
+tls:
+  enabled: true
+  cert_file: "/etc/only1mcp/certs/server.crt"
+  key_file: "/etc/only1mcp/certs/server.key"
+  min_version: "1.3"
+  cipher_suites:
+    - "TLS_AES_256_GCM_SHA384"
+    - "TLS_AES_128_GCM_SHA256"
+
+# Comprehensive audit logging
+audit:
+  enabled: true
+  log_file: "/var/log/only1mcp/audit.log"
+  rotation: "daily"
+  retention_days: 90
+  events: ["all"]
+
+# Metrics and monitoring
+metrics:
+  enabled: true
+  prometheus_port: 9090
+  collection_interval: 5
+  export_to: "prometheus"
+
+# AI Optimization
+ai_optimization:
+  enabled: true
+  ml_routing:
+    enabled: true
+    history_size: 10000
+  predictive_cache:
+    enabled: true
+    preload_top_n: 50
+  anomaly_detection:
+    enabled: true
+    sensitivity: 3.0
+  auto_scaling:
+    enabled: true
+    check_interval_secs: 60
+
+# Multi-region deployment
+multi_region:
+  enabled: true
+  routing_strategy: "weighted"  # Distance + latency + load
+  regions:
+    us-east:
+      location:
+        latitude: 39.0469
+        longitude: -77.4903
+      servers: ["mcp-us-east-1", "mcp-us-east-2"]
+      capacity: 1000
+      priority: 100
+
+    us-west:
+      location:
+        latitude: 37.7749
+        longitude: -122.4194
+      servers: ["mcp-us-west-1"]
+      capacity: 1000
+      priority: 100
+
+    eu-central:
+      location:
+        latitude: 50.1109
+        longitude: 8.6821
+      servers: ["mcp-eu-central-1"]
+      capacity: 800
+      priority: 95
+
+    ap-southeast:
+      location:
+        latitude: 1.3521
+        longitude: 103.8198
+      servers: ["mcp-ap-southeast-1"]
+      capacity: 600
+      priority: 90
+
+# Plugin system
+plugins:
+  enabled: true
+  directory: "/etc/only1mcp/plugins"
+  auto_load: true
+
+# Admin API
+admin_api:
+  enabled: true
+  port: 8081
+  auth_required: true
+  tls_enabled: true
+
+# Daemon mode
+daemon:
+  enabled: true
+  pid_file: "/var/run/only1mcp.pid"
+  user: "only1mcp"
+  group: "only1mcp"
+
+# No hot reload in production
+hot_reload: false
+
+# Advanced analytics
+analytics:
+  enabled: true
+  retention_hours: 168  # 7 days
+  dashboards:
+    - name: "performance"
+      refresh_interval: 30
+    - name: "errors"
+      refresh_interval: 10
+    - name: "capacity"
+      refresh_interval: 60

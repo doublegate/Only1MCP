@@ -1,0 +1,84 @@
+# Solo Developer Configuration
+# Optimized for a single developer working with 2-3 MCP servers on localhost
+
+# Proxy server configuration
+host: "127.0.0.1"
+port: 8080
+
+# Logging configuration
+log_level: "info"
+log_format: "pretty"  # Use "json" for production
+
+# MCP Backend Servers
+servers:
+  # Local filesystem server via STDIO
+  filesystem:
+    name: "Filesystem MCP Server"
+    transport:
+      stdio:
+        command: "npx"
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"]
+        env:
+          NODE_ENV: "development"
+    enabled: true
+    priority: 100
+    weight: 1
+
+  # GitHub MCP server
+  github:
+    name: "GitHub MCP Server"
+    transport:
+      stdio:
+        command: "npx"
+        args: ["-y", "@modelcontextprotocol/server-github"]
+        env:
+          GITHUB_TOKEN: "${GITHUB_TOKEN}"  # Set this in your environment
+    enabled: true
+    priority: 90
+    weight: 1
+
+  # Brave Search MCP server
+  brave-search:
+    name: "Brave Search MCP Server"
+    transport:
+      stdio:
+        command: "npx"
+        args: ["-y", "@modelcontextprotocol/server-brave-search"]
+        env:
+          BRAVE_API_KEY: "${BRAVE_API_KEY}"  # Set this in your environment
+    enabled: true
+    priority: 80
+    weight: 1
+
+# Load balancing
+load_balancing:
+  strategy: "round_robin"  # Simple for solo dev
+  health_check_interval: 30  # seconds
+
+# Caching for development
+cache:
+  enabled: true
+  ttl: 300  # 5 minutes
+  max_size: 100  # entries
+
+# Request batching
+batching:
+  enabled: true
+  window_ms: 100
+  max_batch_size: 10
+
+# Rate limiting (generous for solo dev)
+rate_limiting:
+  enabled: false  # Disabled for development
+
+# TLS/SSL (disabled for localhost)
+tls:
+  enabled: false
+
+# Metrics
+metrics:
+  enabled: true
+  prometheus_port: 9090
+
+# Hot reload (enabled for development)
+hot_reload: true
