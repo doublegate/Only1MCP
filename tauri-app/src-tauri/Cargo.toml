@@ -1,0 +1,26 @@
+[package]
+name = "only1mcp-desktop"
+version = "0.7.0"
+edition = "2021"
+authors = ["Only1MCP Team"]
+description = "Only1MCP Desktop Application"
+license = "GPL-3.0"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.5", features = ["system-tray", "shell-open", "dialog-all", "fs-all", "path-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tokio = { version = "1.35", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Only1MCP library
+only1mcp = { path = "../../", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

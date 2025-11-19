@@ -16,7 +16,9 @@ pub mod error;
 // pub mod gui;  // Complex GUI with full integration - disabled due to circular dependencies
 pub mod gui_simple;  // Simplified GUI backend for dashboards
 pub mod health;
+pub mod marketplace;  // Plugin marketplace registry
 pub mod metrics;
+pub mod multicluster;  // Multi-cluster routing and management
 pub mod multiregion;
 pub mod plugins;
 pub mod proxy;

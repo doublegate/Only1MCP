@@ -1,0 +1,153 @@
+# Only1MCP DigitalOcean Kubernetes Deployment
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: only1mcp
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: only1mcp-config
+  namespace: only1mcp
+data:
+  config.yaml: |
+    proxy:
+      host: 0.0.0.0
+      port: 8080
+      workers: 4
+
+    servers:
+      - id: example
+        name: Example MCP Server
+        transport:
+          type: http
+          url: http://example-mcp:8080
+
+    cache:
+      enabled: true
+      ttl: 300
+      max_size: 1000
+
+    metrics:
+      enabled: true
+      port: 9090
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+  labels:
+    app: only1mcp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: only1mcp
+  template:
+    metadata:
+      labels:
+        app: only1mcp
+        version: v0.7.0
+    spec:
+      containers:
+      - name: only1mcp
+        image: ghcr.io/doublegate/only1mcp:v0.7.0
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: RUST_LOG
+          value: "info"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/only1mcp
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: only1mcp-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+  labels:
+    app: only1mcp
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app: only1mcp
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: only1mcp
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: only1mcp

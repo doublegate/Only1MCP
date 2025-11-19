@@ -18,6 +18,8 @@ use only1mcp::{config, error, proxy, Result};
 use std::path::PathBuf;
 use tracing::info;
 
+mod cli;
+
 #[derive(Parser)]
 #[command(name = "only1mcp")]
 #[command(about = "The Ultimate MCP Server Aggregator", long_about = None)]
@@ -118,6 +120,12 @@ enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigCommands,
+    },
+
+    /// Plugin management commands
+    Plugin {
+        #[command(subcommand)]
+        command: cli::plugin::PluginCommand,
     },
 
     /// Interactive TUI mode
@@ -361,6 +369,10 @@ async fn main() -> Result<()> {
                     println!("  (Config doctor not yet implemented - planned for Phase 3)");
                 },
             }
+        },
+
+        Commands::Plugin { command } => {
+            command.execute().await?;
         },
 
         Commands::Tui => {

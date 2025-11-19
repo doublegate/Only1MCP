@@ -1,0 +1,183 @@
+# Only1MCP Istio Service Mesh Configuration
+
+---
+# Gateway for ingress traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: only1mcp-gateway
+  namespace: only1mcp
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "only1mcp.example.com"
+    tls:
+      httpsRedirect: true
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "only1mcp.example.com"
+    tls:
+      mode: SIMPLE
+      credentialName: only1mcp-tls-cert
+
+---
+# VirtualService for routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+spec:
+  hosts:
+  - "only1mcp.example.com"
+  gateways:
+  - only1mcp-gateway
+  http:
+  # Canary deployment: 90% to v1, 10% to v2
+  - match:
+    - headers:
+        x-version:
+          exact: "v2"
+    route:
+    - destination:
+        host: only1mcp
+        subset: v2
+  - route:
+    - destination:
+        host: only1mcp
+        subset: v1
+      weight: 90
+    - destination:
+        host: only1mcp
+        subset: v2
+      weight: 10
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,reset,connect-failure,refused-stream
+
+---
+# DestinationRule for traffic policies
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: only1mcp
+  namespace: only1mcp
+spec:
+  host: only1mcp
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1000
+      http:
+        http1MaxPendingRequests: 1000
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      simple: LEAST_REQUEST
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  subsets:
+  - name: v1
+    labels:
+      version: v0.6.0
+  - name: v2
+    labels:
+      version: v0.7.0
+
+---
+# PeerAuthentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: only1mcp-mtls
+  namespace: only1mcp
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# AuthorizationPolicy for access control
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: only1mcp-authz
+  namespace: only1mcp
+spec:
+  selector:
+    matchLabels:
+      app: only1mcp
+  action: ALLOW
+  rules:
+  # Allow all requests with valid JWT
+  - from:
+    - source:
+        requestPrincipals: ["*"]
+  # Allow health checks without auth
+  - to:
+    - operation:
+        paths: ["/health", "/metrics"]
+
+---
+# RequestAuthentication for JWT validation
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: only1mcp-jwt
+  namespace: only1mcp
+spec:
+  selector:
+    matchLabels:
+      app: only1mcp
+  jwtRules:
+  - issuer: "https://auth.example.com"
+    jwksUri: "https://auth.example.com/.well-known/jwks.json"
+    audiences:
+    - "only1mcp-api"
+
+---
+# ServiceEntry for external MCP servers
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-mcp-servers
+  namespace: only1mcp
+spec:
+  hosts:
+  - "external-mcp.example.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Telemetry configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: only1mcp-telemetry
+  namespace: only1mcp
+spec:
+  tracing:
+  - providers:
+    - name: "jaeger"
+    randomSamplingPercentage: 100.0
+  metrics:
+  - providers:
+    - name: "prometheus"
