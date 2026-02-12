@@ -123,13 +123,14 @@ jobs:
             target: armv7-unknown-linux-gnueabihf
             use_cross: true
 
-          # macOS
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            use_cross: false
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            use_cross: false
+          # DISABLED: macOS builds removed
+          # # macOS
+          # - os: macos-latest
+          #   target: x86_64-apple-darwin
+          #   use_cross: false
+          # - os: macos-latest
+          #   target: aarch64-apple-darwin
+          #   use_cross: false
 
           # Windows
           - os: windows-latest
