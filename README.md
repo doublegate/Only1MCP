@@ -1,13 +1,13 @@
 # Only1MCP
 
-**High-Performance MCP Server Aggregator & Intelligent Proxy**
+## High-Performance MCP Server Aggregator & Intelligent Proxy
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-127%2F127%20passing-brightgreen.svg)]()
-[![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]()
-[![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]()
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]()
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)]()
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]
+[![Tests](https://img.shields.io/badge/tests-127%2F127%20passing-brightgreen.svg)]
+[![Phase 1](https://img.shields.io/badge/Phase%201-100%25%20Complete-blue.svg)]
+[![Phase 2](https://img.shields.io/badge/Phase%202-100%25%20Complete-brightgreen.svg)]
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)]
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)]
 
 > **Status**: 🎉 **All 4 MCP Servers Operational!** STDIO, SSE, and Streamable HTTP transports working - 14 tools available across Context7, Sequential Thinking, Memory, and NWS Weather servers. Phase 2 Complete with all 6 features - 100% test pass rate (127/127)
 
@@ -19,7 +19,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 ### Phase 1 MVP (✅ Complete)
 
-**Core Proxy Capabilities**
+#### Core Proxy Capabilities
 
 - 🚀 **High-Performance HTTP Proxy** - Axum-based server with <5ms overhead
 - 🔄 **Multiple Transport Support** - HTTP (with connection pooling), STDIO (with process sandboxing), SSE (Server-Sent Events for streaming servers)
@@ -28,14 +28,14 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - 📊 **Prometheus Metrics** - Complete observability with request/error/latency tracking
 - 🔐 **Enterprise Authentication** - JWT validation, OAuth2/OIDC integration, Hierarchical RBAC
 
-**MCP Protocol Support**
+#### MCP Protocol Support
 
 - ✅ **Tools API** - Full support for tool listing and execution
 - ✅ **Resources API** - Resource templates and content fetching
 - ✅ **Prompts API** - Prompt discovery and argument handling
 - ✅ **JSON-RPC 2.0** - Complete protocol implementation
 
-**Performance & Reliability**
+#### Performance & Reliability
 
 - ⚡ **<5ms Latency** - Minimal proxy overhead achieved
 - 📈 **10k+ req/s Throughput** - Designed for high-volume workloads
@@ -43,7 +43,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - 🔄 **Connection Pooling** - bb8-based pool with configurable limits
 - 🏥 **Health Monitoring** - Circuit breakers and health state tracking
 
-**Testing & Quality**
+#### Testing & Quality
 
 - ✅ **127/127 Tests Passing** - 100% test success rate achieved
 - 🧪 **59 Integration Tests** - Server startup, health monitoring, error handling, SSE transport, Streamable HTTP transport, TUI interface, STDIO MCP init, daemon lifecycle
@@ -52,7 +52,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 - 🆕 **Daemon Lifecycle Tests** - Complete daemon management testing (start, stop, foreground, duplicate prevention, stale PIDs, signals)
 - 📝 **8,500+ Lines Documentation** - Comprehensive guides, API references, and implementation details
 
-**Supported Transports**
+#### Supported Transports
 
 - 🌐 **HTTP/HTTPS** - Standard HTTP with connection pooling and keep-alive optimization
 - 📡 **STDIO** - Process-based communication with security sandboxing and resource limits
@@ -69,7 +69,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Tested with NWS Weather MCP server
 - 🔌 **WebSocket** - Full-duplex communication (Phase 3 planned)
 
-**Integrated MCP Servers**
+#### Integrated MCP Servers
 
 - ✅ **Context7** - Up-to-date library documentation (SSE transport)
   - Tools: `resolve-library-id`, `get-library-docs`
@@ -85,11 +85,11 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Status: ✅ Fully Functional (MCP protocol 2024-11-05)
 - ✅ **NWS Weather** - National Weather Service forecasts and alerts (Streamable HTTP transport)
   - Tools: `get-forecast`, `get-alerts`
-  - Endpoint: http://localhost:8124/mcp
+  - Endpoint: <http://localhost:8124/mcp>
   - Protocol: MCP 2025-03-26 (Streamable HTTP with session management)
   - Status: ✅ Fully Functional (requires local server running)
 
-**Transport Support**
+#### Transport Support
 
 - ✅ **SSE Servers** - Full support with automatic SSE parsing (e.g., Context7)
 - ✅ **HTTP MCP Servers** - Any MCP server with HTTP/JSON-RPC 2.0
@@ -108,7 +108,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
 
 ### Phase 2 Features (✅ 100% Complete - 6/6 Features)
 
-**Configuration Management**
+#### Configuration Management
 
 - ✅ **Hot-Reload** - Automatic config updates without restart (notify 6.1)
   - 500ms debounced file watching
@@ -116,7 +116,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Validation-first (preserves old config on error)
   - YAML and TOML support
 
-**Health Monitoring**
+#### Health Monitoring
 
 - ✅ **Active Health Checking** - Timer-based health probes
   - HTTP health checks (GET /health)
@@ -125,7 +125,7 @@ Only1MCP is a high-performance, Rust-based aggregator and intelligent proxy for 
   - Circuit breaker integration
   - Prometheus metrics integration
 
-**Performance Optimization**
+#### Performance Optimization
 
 - ✅ **Response Caching** - TTL-based LRU cache with moka 0.12
   - Three-tier architecture (L1: 5min, L2: 30min, L3: 2hr TTL)
@@ -248,12 +248,14 @@ only1mcp stop
 ### Daemon Mode (Recommended)
 
 **Start the daemon** (runs in background):
+
 ```bash
 only1mcp start
 ```
 
 Output:
-```
+
+```text
 ✅ Only1MCP server started successfully!
 🌐 Proxy URL: http://127.0.0.1:8080
 📋 PID File: /home/user/.config/only1mcp/only1mcp.pid
@@ -273,11 +275,13 @@ Total: 14 tools across 4 servers
 ```
 
 **Stop the daemon**:
+
 ```bash
 only1mcp stop
 ```
 
 **Check daemon status**:
+
 ```bash
 # Via Admin API
 curl http://127.0.0.1:8080/api/v1/admin/health
@@ -295,6 +299,7 @@ curl http://127.0.0.1:8080/api/v1/admin/health
 ### Foreground Mode
 
 Run in the current terminal (useful for debugging):
+
 ```bash
 only1mcp start --foreground
 ```
@@ -304,6 +309,7 @@ Press `Ctrl+C` to stop.
 ### Interactive TUI
 
 Launch the Terminal User Interface:
+
 ```bash
 only1mcp tui
 ```
@@ -311,13 +317,16 @@ only1mcp tui
 **Auto-Start Behavior**: If daemon is not running, TUI will automatically start it.
 
 **Exit Behavior**: When you press `q` to quit TUI, you'll be prompted:
-```
+
+```bash
 🛑 Stop Only1MCP daemon? [y/N]:
 ```
+
 - Type `y` to stop daemon
 - Type `n` (or press Enter) to leave daemon running
 
 **Navigation**:
+
 - `Tab` / `Shift+Tab`: Switch between tabs
 - `↑` / `↓`: Scroll lists
 - `q`: Quit TUI
@@ -329,11 +338,13 @@ only1mcp tui
 **Auto-Creation**: If no config exists, Only1MCP automatically creates one from the solo template.
 
 **Custom Config**:
+
 ```bash
 only1mcp start --config /path/to/custom.yaml
 ```
 
 **Generate Config from Template**:
+
 ```bash
 only1mcp config generate --template solo > only1mcp.yaml
 only1mcp config generate --template team > team-config.yaml
@@ -341,6 +352,7 @@ only1mcp config generate --template enterprise > enterprise-config.yaml
 ```
 
 **Validate Config**:
+
 ```bash
 only1mcp validate
 only1mcp validate --config custom.yaml
@@ -369,16 +381,19 @@ See [API_REFERENCE.md](docs/API_REFERENCE.md) for complete API documentation.
 ### Advanced Usage
 
 **Custom Host/Port**:
+
 ```bash
 only1mcp start --host 0.0.0.0 --port 9000
 ```
 
 **Enable Debug Logging**:
+
 ```bash
 RUST_LOG=debug only1mcp start --foreground
 ```
 
 **List Available Servers** (without starting):
+
 ```bash
 only1mcp list --config only1mcp.yaml
 ```
@@ -386,16 +401,19 @@ only1mcp list --config only1mcp.yaml
 ### Troubleshooting
 
 **Daemon won't start**:
+
 1. Check if already running: `curl http://127.0.0.1:8080/health`
 2. Check logs: `tail -f ~/.config/only1mcp/only1mcp.log`
 3. Try foreground mode: `only1mcp start --foreground`
 
 **Port already in use**:
+
 ```bash
 only1mcp start --port 8081
 ```
 
 **Config validation errors**:
+
 ```bash
 only1mcp validate  # Shows detailed error messages
 ```
@@ -778,7 +796,7 @@ cargo run -- tui
 
 Only1MCP uses a modular, high-performance architecture:
 
-```
+```text
 ┌────────────────────────────────────────────────────┐
 │                 AI Client (Claude, etc.)           │
 └───────────────────┬────────────────────────────────┘
@@ -918,7 +936,7 @@ cargo test -- --test-threads=1
 
 ### Project Structure
 
-```
+```text
 Only1MCP/
 ├── src/
 │   ├── main.rs              # CLI entry point
@@ -941,6 +959,7 @@ Only1MCP/
 Only1MCP includes custom slash commands for streamlined development workflows:
 
 **Development Workflow**:
+
 - `/rust-check` - Comprehensive quality pipeline (format, lint, test, build)
 - `/fix-failing-tests` - Systematic test debugging
 - `/daily-log` - Create or update daily development session logs
@@ -948,11 +967,13 @@ Only1MCP includes custom slash commands for streamlined development workflows:
 - `/sub-agent` - Launch sub-agent with systematic approach and quality standards
 
 **Documentation & Commits**:
+
 - `/update-docs` - Synchronize README and CHANGELOG
 - `/phase-report` - Generate comprehensive phase progress report
 - `/phase-commit` - Create detailed conventional commit messages
 
 **Feature Development**:
+
 - `/next-phase-feature` - Initialize next phase feature development
 - `/memory-update` - Preserve architectural decisions in MCP Memory
 
@@ -1009,12 +1030,13 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ## 📄 License
 
-This project is dual-licensed under either:
+This project is licensed under the GNU General Public License v3.0
+([LICENSE](LICENSE) or <https://www.gnu.org/licenses/gpl-3.0.html>).
 
-- MIT License ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-
-at your option.
+This matches `Cargo.toml` (`license = "GPL-3.0"`) and the `LICENSE` file in this
+repository. An earlier revision of this README advertised a MIT OR Apache-2.0
+dual licence and linked `LICENSE-MIT` and `LICENSE-APACHE`, neither of which has
+ever existed here; that was a documentation error, corrected 2026-08-27.
 
 ---
 
@@ -1060,4 +1082,4 @@ And many more amazing projects!
 
 ---
 
-**Made with ❤️ and Rust**
+## Made with ❤️ and 🦀
