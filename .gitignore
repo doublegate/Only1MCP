@@ -63,3 +63,9 @@ Thumbs.db
 *.dll
 *.so
 *.dylib
+
+# Local salvage of scratch material, one dated folder per rescue
+# (salvaged/YYYYMMDD/). This is a public repository; working notes, release
+# drafts and fetched research are kept on disk for reference but are
+# deliberately never committed or pushed.
+salvaged/
