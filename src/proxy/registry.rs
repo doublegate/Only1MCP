@@ -303,7 +303,7 @@ impl AtomicRegistry {
         registry.servers.remove(server_id);
 
         // Clean up tool mappings
-        for (_, servers) in registry.tool_map.iter_mut() {
+        for servers in registry.tool_map.values_mut() {
             servers.retain(|id| id != server_id);
         }
 

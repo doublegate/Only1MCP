@@ -258,10 +258,7 @@ async fn test_full_proxy_flow_stdio_backend() -> Result<()> {
     };
 
     let config_path = PathBuf::from("/tmp/only1mcp-test-stdio.yaml");
-    let server = ProxyServer::new(config, config_path).await?;
-
-    // Verify server created successfully with STDIO transport
-    assert!(true, "Server with STDIO transport initialized successfully");
+    let _server = ProxyServer::new(config, config_path).await?;
 
     Ok(())
 }

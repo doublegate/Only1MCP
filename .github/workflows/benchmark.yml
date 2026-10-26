@@ -23,6 +23,9 @@ on:
   # Manual trigger only for now
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -30,26 +33,22 @@ env:
 jobs:
   benchmark:
     name: Performance Benchmarks
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-bench-
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: |
@@ -71,12 +70,12 @@ jobs:
         if: success()
         run: |
           # Run criterion benchmarks and generate HTML report
-          cargo bench --bench proxy_benchmark -- --verbose
-          cargo bench --bench cache_benchmark -- --verbose
-          cargo bench --bench routing_benchmark -- --verbose
+          cargo bench --bench load_balancing -- --verbose
+          cargo bench --bench caching -- --verbose
+          cargo bench --bench batching -- --verbose
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: |
@@ -108,7 +107,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -184,7 +185,7 @@ jobs:
           fi
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: load-test-results
           path: results.json
@@ -194,7 +195,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -231,7 +234,7 @@ jobs:
 
       - name: Upload Valgrind report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: valgrind-report
           path: valgrind-out.txt
@@ -241,7 +244,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -250,7 +255,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y linux-tools-common linux-tools-generic
-          cargo install flamegraph
+          cargo install flamegraph --locked
 
       - name: Build release binary
         run: cargo build --release
@@ -261,19 +266,21 @@ jobs:
           sudo flamegraph -o flamegraph.svg -- ./target/release/only1mcp validate config/templates/team.yaml
 
       - name: Upload flamegraph
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: flamegraph
           path: flamegraph.svg
 
   report:
     name: Generate Performance Report
+    permissions:
+      issues: write
     needs: [benchmark, load-test, memory-profile]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v8
 
       - name: Generate report
         run: |
@@ -297,14 +304,14 @@ jobs:
           cat performance-report.md
 
       - name: Upload report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v7
         with:
           name: performance-report
           path: performance-report.md
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -319,7 +326,7 @@ jobs:
 
       - name: Notify on regression
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.issues.createComment({

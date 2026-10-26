@@ -9,7 +9,7 @@ pub fn scrape_metrics() -> MetricsSnapshot {
     let mut snapshot = MetricsSnapshot::default();
 
     for mf in metrics {
-        match mf.get_name() {
+        match mf.name() {
             "only1mcp_proxy_uptime_seconds" => {
                 snapshot.uptime_seconds = get_counter_value(&mf);
             },
@@ -45,11 +45,11 @@ pub fn scrape_metrics() -> MetricsSnapshot {
 }
 
 fn get_counter_value(mf: &MetricFamily) -> u64 {
-    mf.get_metric().first().map(|m| m.get_counter().get_value() as u64).unwrap_or(0)
+    mf.get_metric().first().map(|m| m.get_counter().value() as u64).unwrap_or(0)
 }
 
 fn get_gauge_value(mf: &MetricFamily) -> f64 {
-    mf.get_metric().first().map(|m| m.get_gauge().get_value()).unwrap_or(0.0)
+    mf.get_metric().first().map(|m| m.get_gauge().value()).unwrap_or(0.0)
 }
 
 fn calculate_rate(mf: &MetricFamily) -> f64 {
@@ -61,7 +61,7 @@ fn calculate_rate(mf: &MetricFamily) -> f64 {
 fn extract_percentiles(mf: &MetricFamily) -> (f64, f64, f64) {
     // Extract p50, p95, p99 from histogram
     for m in mf.get_metric() {
-        if m.has_histogram() {
+        if m.get_histogram().is_some() {
             let _h = m.get_histogram();
             // Parse quantiles from histogram
             // Simplified - in production, calculate from buckets

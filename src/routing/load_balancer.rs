@@ -22,10 +22,11 @@ use tracing::{debug, info, instrument, warn};
 use xxhash_rust::xxh3::Xxh3;
 
 /// Routing algorithm selection
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingAlgorithm {
     /// Round-robin distribution
+    #[default]
     RoundRobin,
     /// Least connections using Power of Two Choices
     LeastConnections,
@@ -35,12 +36,6 @@ pub enum RoutingAlgorithm {
     WeightedRandom,
     /// Consistent hashing for session affinity
     ConsistentHash,
-}
-
-impl Default for RoutingAlgorithm {
-    fn default() -> Self {
-        Self::RoundRobin
-    }
 }
 
 /// Routing configuration

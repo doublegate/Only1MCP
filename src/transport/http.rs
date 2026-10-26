@@ -436,7 +436,7 @@ impl TransportMetrics {
 
         MetricsStats {
             request_count: count,
-            average_latency_us: if count > 0 { total_latency / count } else { 0 },
+            average_latency_us: total_latency.checked_div(count).unwrap_or(0),
             error_count: self.error_count.load(Ordering::Relaxed),
         }
     }

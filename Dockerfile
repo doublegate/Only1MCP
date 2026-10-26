@@ -4,12 +4,14 @@
 # =============================================================================
 # Stage 1: Builder - Compile Rust binary
 # =============================================================================
-FROM rust:1.75-slim as builder
+FROM rust:1-slim-bookworm AS builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
+    cmake \
+    clang \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user (will be used in runtime stage)
@@ -19,7 +21,7 @@ RUN useradd -m -u 1000 only1mcp
 WORKDIR /build
 
 # Copy dependency manifests
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock* ./
 
 # Copy source code
 COPY src ./src
@@ -36,8 +38,9 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 # Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 

@@ -103,7 +103,7 @@ fn bench_mixed_workload(c: &mut Criterion) {
     group.bench_function("80_20_hit_miss", |b| {
         b.to_async(&rt).iter(|| async {
             let count = counter.fetch_add(1, Ordering::Relaxed);
-            let key = if count % 5 == 0 {
+            let key = if count.is_multiple_of(5) {
                 // 20% misses
                 format!("nonexistent-{}", count)
             } else {
